@@ -1,0 +1,30 @@
+# -*- makefile -*-
+# for sincos-like functions (one input, two outputs)
+
+include ../../generic/support/Makefile.checkstd
+
+ifndef OPENMP
+ifdef CORE_MATH_NO_OPENMP
+OPENMP=-fno-openmp -DCORE_MATH_NO_OPENMP=$(CORE_MATH_NO_OPENMP)
+endif
+endif
+
+CFLAGS += -W -Wall $(ROUNDING_MATH)
+
+TYPE_UNDER_TEST := double
+
+all:: check_exhaustive
+
+check_exhaustive: check_exhaustive_sincos.o $(CORE_MATH_OBJS) $(FUNCTION_UNDER_TEST)_mpfr.o
+	$(CC) $(LDFLAGS) $(OPENMP) -o $@ $^ -lmpfr -lm
+
+%.o: %.c
+	$(CC) $(CFLAGS) -I ../support -c -o $@ $<
+
+check_exhaustive_sincos.o: ../support/check_exhaustive_sincos.c
+	$(CC) $(CFLAGS) $(CORE_MATH_DEFINES) -I . -c $(OPENMP) -o $@ $<
+
+clean::
+	rm -f *.o check_exhaustive
+
+include ../../generic/support/Makefile.sincos

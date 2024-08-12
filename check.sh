@@ -53,6 +53,10 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 DIR="$TMP_DIR/toto/$(basename "$ORIG_DIR")"
 
+export CORE_MATH_CHECK_STD=true
+export LIBM="/home/lnt/experiment/llvm-project/build/projects/libc/lib/libllvmlibc.a"
+# export LIBM="/home/lnt/experiment/llvm/llvm-project/build/projects/libc/lib/libllvmlibc.a"
+
 mkdir "$TMP_DIR/toto"
 cp -a "$ORIG_DIR" "$ORIG_DIR/../support" "$TMP_DIR/toto"
 cp -a "$ORIG_DIR/../../generic" "$TMP_DIR"
@@ -81,6 +85,7 @@ else
             KIND=--worst
     esac
 fi
+KIND=--worst
 
 if [[ -z "$CORE_MATH_VERBOSE" ]]; then
     QUIET=--quiet
@@ -88,6 +93,12 @@ else
     QUIET=
 fi
 
+# define CORE_MATH_NO_OPENMP if you don't want OpenMP
+if [[ -z "$CORE_MATH_NO_OPENMP" ]]; then
+   OPENMP=-fopenmp
+else
+   export CFLAGS="$CFLAGS -DCORE_MATH_NO_OPENMP --libc"
+fi
 
 has_symbol () {
     [ "$(nm "$LIBM" | while read a b c; do if [ "$c" = "$FUN" ]; then echo OK; return; fi; done | wc -l)" -ge 1 ]
