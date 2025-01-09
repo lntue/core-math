@@ -232,11 +232,14 @@ doloop(void)
   printf("%d tests passed, %d failure(s)\n", tests, failures);
 }
 
-// When x is a NaN, returns 1 if x is an sNaN and 0 if it is a qNaN
+/* When x is a NaN, returns 1 if x is an sNaN and 0 if it is a qNaN.
+   According to https://en.wikipedia.org/wiki/Extended_precision,
+   sNaN's have bits 63-62 equal to 10 (and bits 61-0 non-zero),
+   while qNaN's have bits 63-62 equal to 11. */
 static inline int issignaling(long double x) {
   b80u80_t u = {.f = x};
 
-  return !(u.m >> 63);
+  return ((u.m >> 62) & 1) == 0;
 }
 
 /* check for signaling NaN input */
@@ -245,7 +248,7 @@ check_signaling_nan (void)
 {
   b80u80_t u;
   u.e = 0x7fffu;
-  u.m = 0xc000000000000000ull;
+  u.m = 0xa000000000000000ull;
   long double snan = u.f;
   long double y = cr_function_under_test (snan, 2.0L);
   // check that foo(NaN) = NaN
@@ -275,7 +278,7 @@ check_signaling_nan (void)
   }
   // check also sNaN with the sign bit set
   u.e = 0xffffu;
-  u.m = 0xc000000000000000ull;
+  u.m = 0xa000000000000000ull;
   snan = u.f;
   y = cr_function_under_test (snan, 2.0L);
   // check that foo(NaN) = NaN
