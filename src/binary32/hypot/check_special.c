@@ -31,6 +31,7 @@ SOFTWARE.
 #include <unistd.h>
 #include <fenv.h>
 #include <math.h>
+#include <gmp.h>
 #if (defined(_OPENMP) && !defined(CORE_MATH_NO_OPENMP))
 #include <omp.h>
 #endif
@@ -169,6 +170,39 @@ check_random_all (void)
     check_random (getpid () + i, nthreads);
 }
 
+mpz_t SquareT;
+
+static void
+initSquares (void)
+{
+  for (uint64_t x = 1; x < 0x1000; x++)
+    mpz_setbit (SquareT, x * x);
+}
+
+static int
+is_square (uint64_t t)
+{
+  return mpz_tstbit (SquareT, t);
+}
+
+static void
+check_near_exact (void)
+{
+  mpz_init (SquareT);
+  initSquares ();
+  for (uint64_t x = 2; x < 0x1000; x++)
+    for (uint64_t y = 2; y <= x; y++)
+    {
+      uint64_t t = x * x + y * y;
+      if (is_square (t) || is_square (t-1) || is_square (t+1))
+      {
+        for (int e = -149 - 12; e < 128; e++)
+          check (ldexpf ((float) x, e), ldexpf ((float) y, e));
+      }
+    }
+  mpz_clear (SquareT);
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -210,6 +244,10 @@ main (int argc, char *argv[])
           exit (1);
         }
     }
+
+  printf ("Checking near-exact values\n");
+  fflush (stdout);
+  check_near_exact ();
 
   printf ("Checking random values\n");
   check_random_all ();
