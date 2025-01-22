@@ -189,6 +189,9 @@ check_midpoint (void)
   srand (getpid ());
   uint64_t p0 = rand () % SKIP;
   uint64_t q0 = rand () % SKIP;
+#if (defined(_OPENMP) && !defined(CORE_MATH_NO_OPENMP))
+#pragma omp parallel for schedule(dynamic,1)
+#endif
   // since we want p^2+q^2 >= 2^64 with p > q, we need p > sqrt(2^63)
   for (uint64_t p = 0xb504f334ul + p0; p < 0x100000000ul; p += SKIP)
   {
