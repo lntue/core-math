@@ -1,3 +1,16 @@
+# the following does not overflow to nearest
+0x1.fffffffffffffffep+16383,0x1.fffffffffffffffep+16351
+# the following overflows to nearest
+0x1.fffffffffffffffep+16383,0x1p+16352
+1,0x1.fffffffffffffffep-1
+1,0x1p-65
+1,0x1p-64
+# the following should give 1 for RNDN
+1,0x1.6a09e667f3bcc908p-32
+# the following should give nextabove(1) for RNDN
+1,0x1.6a09e667f3bcc90ap-32
+# the following is a midpoint case which rounds to x
+0x1.fffffffep+63,0x1.ffffffffp+31
 # special and extremal values
 +snan,+snan
 +snan,+nan
@@ -323,3 +336,12 @@
 -0x1.fffffffffffffffep+16383,-0x1p-16382
 -0x1.fffffffffffffffep+16383,-1
 -0x1.fffffffffffffffep+16383,-0x1.fffffffffffffffep+16383
+# non-regression tests
+0xf.f92fca109c128p+60,0xe.c93993b6112dffp+56
+0xb.0008870e7ad7ep+51,0x8.0685a023487ebd4p+61
+0xe.4eb4p+14,0xb.553fa8p+23
+0x9.a28cb60fb6p+47,0xb.5549c4337f204p+51
+0xa.ccdd2a0648p+45,0x8.03d1f171cae04p+51
+0x3.8a8778181a14805p-16385,0x0.97260d7de781dc8p-16385
+0x2.cd492622fdccdep-16385,0x1.2f5068b6c586a64p-16385
+0x0.5ec0fba54fa3d7cp-16385,0x0.236d2d8005920bp-16385

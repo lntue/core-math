@@ -170,37 +170,52 @@ check_random_all (void)
     check_random (getpid () + i, nthreads);
 }
 
-mpz_t SquareT;
-
-static void
-initSquares (void)
-{
-  for (uint64_t x = 1; x < 0x1000; x++)
-    mpz_setbit (SquareT, x * x);
-}
-
+// return 1 if t = k^2 + c with c in {-1,0,1}
 static int
-is_square (uint64_t t)
+is_near_square (uint64_t t)
 {
-  return mpz_tstbit (SquareT, t);
+  t ++;
+  uint64_t k = (uint64_t) sqrt ((double) t);
+  uint64_t r;
+  if (k * k > t)
+  {
+    k--;
+    assert (k * k <= t);
+    r = t - k * k;
+  }
+  else
+    r = t - k * k;
+  assert (r <= 2 * k);
+  return r <= 2;
 }
+
+#define LIMIT 0x1000000ull // 2^24
 
 static void
 check_near_exact (void)
 {
-  mpz_init (SquareT);
-  initSquares ();
-  for (uint64_t x = 2; x < 0x1000; x++)
+  uint64_t nx = CORE_MATH_TESTS / LIMIT; // wanted number of tested x-values
+  if (nx == 0)
+    nx = 1;
+  nx = nx * 20000; // so that this takes comparable time wrt check_random
+  uint64_t skip = (nx > LIMIT) ? 1 : LIMIT / nx;
+  uint64_t x0 = 2 + (getpid () % skip);
+#if (defined(_OPENMP) && !defined(CORE_MATH_NO_OPENMP))
+#pragma omp parallel for schedule(dynamic,1)
+#endif
+  for (uint64_t x = x0; x < LIMIT; x += skip)
+  {
     for (uint64_t y = 2; y <= x; y++)
     {
       uint64_t t = x * x + y * y;
-      if (is_square (t) || is_square (t-1) || is_square (t+1))
+      if (is_near_square (t))
       {
-        for (int e = -149 - 12; e < 128; e++)
-          check (ldexpf ((float) x, e), ldexpf ((float) y, e));
+        check ((float) x, (float) y);
+        // also check in the subnormal range
+        check (ldexpf ((float) x, -149), ldexpf ((float) y, -149));
       }
     }
-  mpz_clear (SquareT);
+  }
 }
 
 int
@@ -250,6 +265,7 @@ main (int argc, char *argv[])
   check_near_exact ();
 
   printf ("Checking random values\n");
+  fflush (stdout);
   check_random_all ();
 
   /* we check triples with exponent difference 0 <= k <= 12 */

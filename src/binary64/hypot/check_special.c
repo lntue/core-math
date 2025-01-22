@@ -29,12 +29,14 @@ SOFTWARE.
 #include <stdint.h>
 #include <string.h>
 #include <fenv.h>
+#include <gmp.h>
 #include <mpfr.h>
 #if (defined(_OPENMP) && !defined(CORE_MATH_NO_OPENMP))
 #include <omp.h>
 #endif
 #include <unistd.h>
 #include <math.h>
+#include <assert.h>
 
 void doloop (int, int);
 extern double cr_hypot (double, double);
@@ -409,6 +411,64 @@ check_near_power_two (int k)
   }
 }
 
+// return 1 if t = k^2 + c with c in {-1,0,1}
+static int
+is_near_square (uint64_t t)
+{
+  t ++;
+  uint64_t k = (uint64_t) sqrt ((double) t);
+  uint64_t r;
+  if (k * k > t) // k too large
+  {
+    k--;
+    assert (k * k <= t);
+    r = t - k * k;
+  }
+  else
+  {
+    r = t - k * k;
+    if (r > 2 * k) // k too small
+    {
+      k++;
+      r = t - k * k;
+    }
+  }
+  assert (r <= 2 * k);
+  return r <= 2;
+}
+
+#define LIMIT 0x20000000000000ull // 2^53
+
+static void
+check_near_exact (void)
+{
+  // we want LIMIT^2 / skip^2 ~ CORE_MATH_TESTS
+  // thus LIMIT/SKIP ~ sqrt(CORE_MATH_TESTS)
+  // thus SKIP ~ LIMIT/sqrt(CORE_MATH_TESTS)
+  uint64_t u = (uint64_t) sqrt ((double) CORE_MATH_TESTS);
+  u = 50 * u; // so that this takes comparable time wrt check_random
+  uint64_t skip = (LIMIT >= u) ? LIMIT / u : 1;
+  srand (getpid ());
+  uint64_t x0 = 2 + (rand () % skip);
+  uint64_t y0 = 2 + (rand () % skip);
+#if (defined(_OPENMP) && !defined(CORE_MATH_NO_OPENMP))
+#pragma omp parallel for schedule(dynamic,1)
+#endif
+  for (uint64_t x = x0; x < LIMIT; x += skip)
+  {
+    for (uint64_t y = y0; y <= x; y += skip)
+    {
+      uint64_t t = x * x + y * y;
+      if (is_near_square (t))
+      {
+        check ((double) x, (double) y);
+        // also check in the subnormal range
+        check (ldexp ((double) x, -1074), ldexp ((double) y, -1074));
+      }
+    }
+  }
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -454,6 +514,10 @@ main (int argc, char *argv[])
   ref_init ();
   ref_fesetround (rnd);
   fesetround(rnd1[rnd]);
+
+  printf ("Checking near-exact values\n");
+  fflush (stdout);
+  check_near_exact ();
 
   printf ("Checking values near 2^e\n");
   check_near_power_two (2);

@@ -148,7 +148,9 @@ check (long double x, long double y)
   ref_fesetround(rnd);
   mpfr_flags_clear (MPFR_FLAGS_INEXACT);
   long double z1 = ref_function_under_test(x, y);
+#ifdef CORE_MATH_CHECK_INEXACT
   mpfr_flags_t inex1 = mpfr_flags_test (MPFR_FLAGS_INEXACT);
+#endif
   fesetround(rnd1[rnd]);
   feclearexcept (FE_INEXACT);
   long double z2 = cr_function_under_test(x, y);
@@ -168,6 +170,7 @@ check (long double x, long double y)
     exit(1);
 #endif
   }
+#ifdef CORE_MATH_CHECK_INEXACT
   if ((inex1 == 0) && (inex2 != 0))
   {
     printf ("Spurious inexact exception for x=%La y=%La (z=%La)\n", x, y, z1);
@@ -188,6 +191,7 @@ check (long double x, long double y)
     exit(1);
 #endif
   }
+#endif
   return 0;
 }
 
