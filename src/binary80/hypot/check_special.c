@@ -169,15 +169,14 @@ check_exact (void)
   srand (getpid ());
   uint64_t p0 = 1 + (rand () % SKIP);
   uint64_t q0 = 1 + (rand () % SKIP);
-  // 0xb504f333 = floor(sqrt(2^63)), this ensures 2*p*q < 2^64
 #if (defined(_OPENMP) && !defined(CORE_MATH_NO_OPENMP))
 #pragma omp parallel for schedule(dynamic,1)
 #endif
-  for (uint64_t p = p0; p <= 0xb504f333; p += SKIP)
+  for (uint64_t p = p0; p < 0x100000000ul; p += SKIP)
     for (uint64_t q = q0; q < p; q += SKIP)
     {
       x = (long double) (p * p - q * q);
-      y = (long double) (2 * p * q);
+      y = 2.0 * (long double) (p * q); // p*q is always < 2^64
       check (x, y);
     }
 }
