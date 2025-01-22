@@ -159,7 +159,7 @@ check (long double x, long double y)
   check_aux (-y, -x);
 }
 
-#define SKIP 1000000
+#define SKIP 500000
 
 // check x = p^2-q^2, y = 2*p*q
 static void
@@ -168,12 +168,13 @@ check_exact (void)
   long double x, y;
   srand (getpid ());
   uint64_t p0 = 1 + (rand () % SKIP);
+  uint64_t q0 = 1 + (rand () % SKIP);
   // 0xb504f333 = floor(sqrt(2^63)), this ensures 2*p*q < 2^64
 #if (defined(_OPENMP) && !defined(CORE_MATH_NO_OPENMP))
 #pragma omp parallel for schedule(dynamic,1)
 #endif
   for (uint64_t p = p0; p <= 0xb504f333; p += SKIP)
-    for (uint64_t q = 1; q < p; q += SKIP)
+    for (uint64_t q = q0; q < p; q += SKIP)
     {
       x = (long double) (p * p - q * q);
       y = (long double) (2 * p * q);
