@@ -132,6 +132,27 @@ is_snan (b80u80_t s)
   return (e & 0x7fff) == 0x7fff && m != 0 && (m >> 63) == 0;
 }
 
+/* The algorithm is as follows:
+   - first swap x and y if |x| < |y| (where NaN > Inf > normal number)
+   - then deal with x or y being NaN or Inf
+   - if x or y is subnormal, normalize their significands mx and my
+     so that 2^63 <= mx, my < 2^64
+   - compute the exponent difference d = x_exp - y_exp
+   - if d >= 32, we deduce directly the correct rounding
+   - otherwise we compute two 128-bit integers hh and ll
+     such that hh*2^128 + ll = mx^2 + (my/d)^2
+   - deal with overflow
+   - compute a double-double approximation sh + sl of sqrt(hh) by first
+     computing a double approximation, and refining by Newton iteration
+   - round sh + sl to an integer approximation th
+   - in the subnormal case, shift right hh, ll and th so that the last
+     significant bit of th corresponds to 2^-16445 (smallest subnormal)
+   - compute the remainder r = hh - th^2, and adjust it and th so that
+     0 <= r < 2th+1, thus th = floor(sqrt(hh))
+   - if r=0 and ll=0, we are in the exact case, restore the inexact flag
+   - return th or th+1 (with appropriate exponent) according to the rounding
+     mode
+*/
 long double
 cr_hypotl (long double x, long double y)
 {
@@ -327,7 +348,8 @@ cr_hypotl (long double x, long double y)
     r += 2 * th - 1;
     th --;
   }
-  if (r >= 2 * th + 1) // th too small
+  // if th was too large, then r < 2th+1 now, thus using "else" is ok
+  else if (r >= 2 * th + 1) // th too small
   {
     // th -> th+1, thus r -> r - 2*th - 1
     r -= 2 * th + 1;
