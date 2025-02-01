@@ -162,12 +162,17 @@ cr_hypotl (long double x, long double y)
   int x_exp = (sx.e & 0x7fff) - 0x3fff;
   int y_exp = (sy.e & 0x7fff) - 0x3fff;
 
-  if (x_exp < y_exp || (x_exp == y_exp && sx.m < sy.m)) // swap x and y
+  if (x_exp - y_exp - (sx.m < sy.m) < 0) // swap x and y
   {
-    sx.f = y;
-    sy.f = x;
-    int t = x_exp; x_exp = y_exp; y_exp = t;
-    long double z = x; x = y; y = z;
+    uint64_t m = sx.m;
+    sx.m = sy.m;
+    sy.m = m;
+    int e = sx.e;
+    sx.e = sy.e;
+    sy.e = e;
+    int t = x_exp;
+    x_exp = y_exp;
+    y_exp = t;
   }
 
   // now x_exp > y_exp or (x_exp == y_exp and sx.m >= sy.m)
@@ -178,14 +183,14 @@ cr_hypotl (long double x, long double y)
        hypot(±Inf, qNaN) is +Inf
        hypot(qNaN, ±Inf) is +Inf */
     if (is_snan (sx) || is_snan (sy))
-      return x + y;
+      return sx.f + sy.f;
     if (is_nan (sx) || is_nan (sy)) {
       if (is_nan (sx) && is_nan (sy)) // x = y = qNaN
-        return x + y;
+        return sx.f + sy.f;
       // now one is qNaN and the other is either Inf or a normal number
       if (x_exp == 0x4000 && y_exp == 0x4000) // x=qNaN and y=Inf (or converse)
         return 1.0L / 0.0L;
-      return x + y;
+      return sx.f + sy.f;
     }
     // now neither x nor y is NaN, at least one is Inf
     return 1.0L / 0.0L;
@@ -284,6 +289,7 @@ cr_hypotl (long double x, long double y)
 
   // now sqrt(x^2 + y^2) < 2^16384*(1-2^-65)
 
+#if 1
   /* We first compute a binary64 approximation of sqrt(hh),
      that we refine by Newton iteration. */
   b64u64_t h, l;
@@ -326,6 +332,15 @@ cr_hypotl (long double x, long double y)
   sl.f = MAGIC + sl.f;
   th += (int16_t) (sl.m & 0x3fffffffffffful);
 
+#endif
+#if 0
+  b80u80_t z;
+  int high = hh >> 127;
+  z.m = hh >> (63 + high);
+  z.e = 1024 + 125 + high;
+  z.f = __builtin_sqrtl(z.f);
+  u128 th = z.m;
+#endif
   /* sqrt(x^2+y^2) ~ th * 2^(x_exp - 63) with 2^63 <= th < 2^64
      thus 2^x_exp <= sqrt(x^2+y^2) < 2^(x_exp + 1)
      and since the smallest normal is 2^-16382,
