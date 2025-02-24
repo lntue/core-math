@@ -1,6 +1,6 @@
 /* Correctly-rounded sincos of binary32 value.
 
-Copyright (c) 2024 Alexei Sibidanov
+Copyright (c) 2024-2025 Alexei Sibidanov
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -195,14 +195,21 @@ void cr_sincosf(float x, float *sout, float *cout){
   uint32_t ax = t.u<<1;
   int ia;
   double z0 = x, z;
-  if(__builtin_expect(ax<0x822d97c8u, 1)){
-    if (__builtin_expect(ax<0x73000000, 0)){
-      if (__builtin_expect(ax<0x66000000u, 0)){
+  if(__builtin_expect(ax<0x822d97c8u, 1)){ // |x| < 0x1.2d97c8p+3
+    if (__builtin_expect(ax<0x73000000u, 0)){ // |x| < 0x1p-12
+      if (__builtin_expect(ax<0x66000000u, 0)){ // |x| < 0x1p-25
 	if (__builtin_expect(ax==0u, 0)){
 	  *sout = x;
 	  *cout = 1.0f;
 	} else {
 	  *sout = __builtin_fmaf(-x, __builtin_fabsf(x), x);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+          /* We have underflow when |x| <= 0x1p-126 for rounding towards zero,
+             and when |x| < 0x1p-126 for rounding to nearest or away from zero.
+             In all cases this is when |sout| < 0x1p-126. */
+          if (__builtin_fabsf(*sout) < 0x1p-126)
+            errno = ERANGE; // underflow
+#endif
 	  *cout = 1.0f - 0x1p-25f;
 	}
       } else {

@@ -1,7 +1,7 @@
 /* Check correctness of binary32 function like sincos by exhaustive search.
 
 Copyright (c) 2022 Alexei Sibidanov.
-Copyright (c) 2022-2024 Paul Zimmermann, INRIA.
+Copyright (c) 2022-2025 Paul Zimmermann, INRIA.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -102,48 +102,6 @@ is_inf (float x)
 }
 #endif
 
-int underflow_before; // non-zero if processor raises underflow before rounding
-
-// return non-zero if the processor raises underflow before rounding
-// (e.g., aarch64)
-static void
-check_underflow_before (void)
-{
-  fexcept_t flag;
-  fegetexceptflag (&flag, FE_ALL_EXCEPT); // save flags
-  fesetround (FE_TONEAREST);
-  feclearexcept (FE_UNDERFLOW);
-  float x = 0x1p-126f;
-  float y = __builtin_fmaf (-x, x, x);
-  if (x == y) // this is needed otherwise the compiler says y is unused
-    underflow_before = fetestexcept (FE_UNDERFLOW);
-  fesetexceptflag (&flag, FE_ALL_EXCEPT); //restore flags
-}
-
-/* In case of underflow before rounding and |y| = 2^-126 or |z| = 2^-126,
-   raises the MPFR underflow if |f1(x)| < 2^-126 or |f2(x)| < 2^-126 */
-static void
-fix_spurious_underflow (float x, float y, float z)
-{
-  if (!underflow_before ||
-      (__builtin_fabsf (y) != 0x1p-126f && __builtin_fabsf (z) != 0x1p-126f))
-    return;
-  // the processor raises underflow before rounding, and |y| = 2^-126
-  // or |z| = 2^-126
-  mpfr_t t, u;
-  mpfr_init2 (t, 24);
-  mpfr_init2 (u, 24);
-  mpfr_set_flt (t, x, MPFR_RNDN); // exact
-  mpfr_function_under_test (t, u, t, MPFR_RNDZ);
-  mpfr_abs (t, t, MPFR_RNDN); // exact
-  mpfr_abs (u, u, MPFR_RNDN); // exact
-  if (mpfr_cmp_d (t, 0x1p-126) < 0 || mpfr_cmp_d (u, 0x1p-126) < 0)
-    // |f1(x)| < 2^-126 or |f2(x)| < 2^-126
-    mpfr_set_underflow ();
-  mpfr_clear (t);
-  mpfr_clear (u);
-}
-
 void
 doit (uint32_t n)
 {
@@ -192,8 +150,6 @@ doit (uint32_t n)
   if (mpfr_flags_test (MPFR_FLAGS_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_INEXACT))
     mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
 
-  fix_spurious_underflow (x, z1, z2);
-
   // check spurious/missing underflow
   if (fetestexcept (FE_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_UNDERFLOW))
   {
@@ -240,9 +196,7 @@ doit (uint32_t n)
 
   // check errno
 #ifdef CORE_MATH_SUPPORT_ERRNO
-  /* If x is a normal number and y1/y2 is NaN, we should have errno = EDOM.
-     If x is a normal number and y1/y2 is +/-Inf, we should have errno = ERANGE.
-  */
+  // If x is a normal number and y1/y2 is NaN, we should have errno = EDOM.
   if (!is_nan (x) && !is_inf (x))
   {
     if ((is_nan (y1) || is_nan (y2)) && errno != EDOM)
@@ -251,9 +205,25 @@ doit (uint32_t n)
       fflush (stdout);
       if (!keep) exit (1);
     }
-    if ((is_inf (y1) || is_inf (y2)) && errno != ERANGE)
+    if ((!is_nan (y1) && !is_nan (y2)) && errno == EDOM)
+    {
+      printf ("Spurious errno=EDOM for x=%a y=(%a,%a)\n", x, y1, y2);
+      fflush (stdout);
+      if (!keep) exit (1);
+    }
+
+    int expected_erange = ((is_inf (y1) || is_inf (y2)) && inex_y == 0) ||
+      mpfr_flags_test (MPFR_FLAGS_OVERFLOW) ||
+      mpfr_flags_test (MPFR_FLAGS_UNDERFLOW);
+    if (expected_erange && errno != ERANGE)
     {
       printf ("Missing errno=ERANGE for x=%a y=(%a,%a)\n", x, y1, y2);
+      fflush (stdout);
+      if (!keep) exit (1);
+    }
+    if (!expected_erange && errno == ERANGE)
+    {
+      printf ("Spurious errno=ERANGE for x=%a y=(%a,%a)\n", x, y1, y2);
       fflush (stdout);
       if (!keep) exit (1);
     }
@@ -405,8 +375,6 @@ main (int argc, char *argv[])
           exit (1);
         }
     }
-
-  check_underflow_before ();
 
   return doloop();
 }
