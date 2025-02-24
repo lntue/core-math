@@ -52,9 +52,6 @@ int rnd = 0;
 typedef union { double f; uint64_t i; } d64u64;
 typedef struct {
   double x;
-#ifdef CORE_MATH_SUPPORT_ERRNO
-  int errno_ref;
-#endif
 } testcase;
 
 static void
@@ -100,31 +97,8 @@ readstdin(testcase **result, int *count)
       item->x = u.f;
       (*count)++;
     }
-#ifndef CORE_MATH_SUPPORT_ERRNO
     else if (sscanf(buf, "%la", &(item->x)) == 1)
       (*count)++;
-#else
-    else {
-      char err_str[8];
-      int readcnt = sscanf(buf, "%la,%7s", &(item->x), err_str);
-      if (readcnt == 1) {
-        item->errno_ref = 0;
-        (*count)++;
-      }
-      else if (readcnt == 2) {
-        if (strncmp(err_str, "ERANGE", 7U) == 0) {
-          item->errno_ref = ERANGE;
-        }
-        else if (strncmp(err_str, "EDOM", 5U) == 0) {
-          item->errno_ref = EDOM;
-        }
-        else {
-          item->errno_ref = 0;
-        }
-        (*count)++;
-      }
-    }
-#endif
   }
 }
 
@@ -151,6 +125,17 @@ is_nan (double x)
   return (e == 0x7ff || e == 0xfff) && (u << 12) != 0;
 }
 
+#ifdef CORE_MATH_SUPPORT_ERRNO
+/* define our own is_inf function to avoid depending from math.h */
+static inline int
+is_inf (double x)
+{
+  uint64_t u = asuint64 (x);
+  uint64_t e = u >> 52;
+  return (e == 0x7ff || e == 0xfff) && (u << 12) == 0;
+}
+#endif
+
 static inline int
 is_equal (double x, double y)
 {
@@ -159,48 +144,6 @@ is_equal (double x, double y)
   if (is_nan (y))
     return is_nan (x);
   return asuint64 (x) == asuint64 (y);
-}
-
-int underflow_before; // non-zero if processor raises underflow before rounding
-
-// return non-zero if the processor raises underflow before rounding
-// (e.g., aarch64)
-static void
-check_underflow_before (void)
-{
-  fexcept_t flag;
-  fegetexceptflag (&flag, FE_ALL_EXCEPT); // save flags
-  fesetround (FE_TONEAREST);
-  feclearexcept (FE_UNDERFLOW);
-  float x = 0x1p-126f;
-  float y = __builtin_fmaf (-x, x, x);
-  if (x == y) // this is needed otherwise the compiler says y is unused
-    underflow_before = fetestexcept (FE_UNDERFLOW);
-  fesetexceptflag (&flag, FE_ALL_EXCEPT); //restore flags
-}
-
-/* In case of underflow before rounding and |y| = 2^-1022 or |z| = 2^-1022,
-   raises the MPFR underflow exception if |f1(x)| < 2^-1022 or |f2(x)| < 2^-1022. */
-static void
-fix_spurious_underflow (double x, double y, double z)
-{
-  if (!underflow_before ||
-      (__builtin_fabs (y) != 0x1p-1022 && __builtin_fabs (z) != 0x1p-1022))
-    return;
-  // the processor raises underflow before rounding, and |y| = 2^-1022
-  // or |z| = 2^-1022
-  mpfr_t t, u;
-  mpfr_init2 (t, 53);
-  mpfr_init2 (u, 53);
-  mpfr_set_d (t, x, MPFR_RNDN); // exact
-  mpfr_function_under_test (t, u, t, MPFR_RNDZ);
-  mpfr_abs (t, t, MPFR_RNDN); // exact
-  mpfr_abs (u, u, MPFR_RNDN); // exact
-  if (mpfr_cmp_d (t, 0x1p-1022) < 0 || mpfr_cmp_d (u, 0x1p-1022) < 0)
-    // |f1(x)| < 2^-1022 or |f2(x)| < 2^-1022
-    mpfr_set_underflow ();
-  mpfr_clear (t);
-  mpfr_clear (u);
 }
 
 // return 1 if failure, 0 otherwise
@@ -221,9 +164,6 @@ check (testcase ts)
   errno = 0;
 #endif
   cr_function_under_test(ts.x, &s2, &c2);
-#ifdef CORE_MATH_SUPPORT_ERRNO
-  int cr_errno = errno;
-#endif
 #ifdef CORE_MATH_CHECK_INEXACT
   int inex2 = fetestexcept (FE_INEXACT);
 #endif
@@ -245,8 +185,6 @@ check (testcase ts)
     exit(1);
 #endif
   }
-
-  fix_spurious_underflow (ts.x, s1, c1);
 
   // Check for spurious/missing underflow exception
   if (fetestexcept (FE_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_UNDERFLOW))
@@ -316,14 +254,58 @@ check (testcase ts)
 #endif
 
 #ifdef CORE_MATH_SUPPORT_ERRNO
-  // most tests don't check for errno setting, so it's not yet possible to check when errno was set incorrectly (case when errno_ref = 0 & cr_errno != 0)
-  if (ts.errno_ref != 0 && cr_errno != ts.errno_ref) {
-    printf("%s error not set for x=%la (s=%la c=%la)\n", ts.errno_ref == ERANGE ? "Range" : "Domain", ts.x, c1, c2);
-#ifndef DO_NOT_ABORT
-    exit(1);
+  // If x is a normal number and y is NaN, we should have errno = EDOM.
+  if (!is_nan (ts.x) && !is_inf (ts.x))
+  {
+    if ((is_nan (s1) || is_nan (c1)) && errno != EDOM)
+    {
+      printf ("Missing errno=EDOM for x=%la (s=%la,c=%la)\n", ts.x, s1, c1);
+      fflush (stdout);
+#ifdef DO_NOT_ABORT
+      return 1;
+#else
+      exit(1);
 #endif
+    }
+    if ((!is_nan (s1) && !is_nan (c1)) && errno == EDOM)
+    {
+      printf ("Spurious errno=EDOM for x=%la (s=%la,c=%la)\n", ts.x, s1, c1);
+      fflush (stdout);
+#ifdef DO_NOT_ABORT
+      return 1;
+#else
+      exit(1);
+#endif
+    }
+
+    /* If x is a normal number and a pole error (s/c exact infinity) or an
+       overflow/underflow occurs, we should have errno = ERANGE. */
+    int expected_erange = ((is_inf (s1) || is_inf (c1)) && inex1 == 0) ||
+      mpfr_flags_test (MPFR_FLAGS_OVERFLOW) ||
+      mpfr_flags_test (MPFR_FLAGS_UNDERFLOW);
+    if (expected_erange && errno != ERANGE)
+    {
+      printf ("Missing errno=ERANGE for x=%la (s=%la,c=%la)\n", ts.x, s1, c1);
+      fflush (stdout);
+#ifdef DO_NOT_ABORT
+      return 1;
+#else
+      exit(1);
+#endif
+    }
+    if (!expected_erange && errno == ERANGE)
+    {
+      printf ("Spurious errno=ERANGE for x=%la (s=%la,c=%la)\n", ts.x, s1, c1);
+      fflush (stdout);
+#ifdef DO_NOT_ABORT
+      return 1;
+#else
+      exit(1);
+#endif
+    }
   }
 #endif
+
   return 0;
 }
 
@@ -453,8 +435,6 @@ main (int argc, char *argv[])
           exit (1);
         }
     }
-
-  check_underflow_before ();
 
   check_signaling_nan ();
 
