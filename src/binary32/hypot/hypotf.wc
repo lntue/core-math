@@ -7204,3 +7204,9 @@
 0x1.03fef8p+30,0x1.03fffep+23
 0x1.03ffp+30,0x1.040002p+23
 0x1.03fff8p+30,0x1.02fffep+23
+# the following x,y values satisfy sqrt(x^2+y^2) >= 2^128,
+# thus should raise overflow for rounding towards zero or downward
+0x1.fffffep+127,0x1.6a09e8p+116
+# the following x,y values satisfy sqrt(x^2+y^2) < 2^128,
+# thus should not raise overflow for rounding towards zero or downward
+0x1.fffffep+127,0x1.6a09e6p+116

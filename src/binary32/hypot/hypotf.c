@@ -55,22 +55,38 @@ float cr_hypotf(float x, float y){
   double xd = at, yd = ay, x2 = xd*xd, y2 = yd*yd, r2 = x2 + y2;
   if(__builtin_expect(yd < xd*0x1.fffffep-13, 0))
   {
+    /* Since xd<=0x1.fffffep127, we have
+       yd < 0x1.fffffep127*0x1.fffffep-13=0x1.fffffc000002p+115,
+       thus sqrt(xd^2+yd^2) < 0x1.fffffefffffcdp+127 < 2^128,
+       thus for rounding towards zero or downwards, overflow cannot happen. */
     c = __builtin_fmaf(0x1p-13f, ay, at);
 #ifdef CORE_MATH_SUPPORT_ERRNO
-    if(c>0x1.fffffep127f) errno = ERANGE;
+    /* If we replace v.u > 0x7f7fffffu by c > 0x1.fffffep+127,
+       the test fails with gcc 14.2.0 under Debian Linux. */
+    b32u32_u v = {.f = c};
+    if(v.u > 0x7f7fffffu) errno = ERANGE; // overflow
 #endif
     return c;
   }
   double r = __builtin_sqrt(r2);
   b64u64_u t = {.f = r};
   c = r;
-  if(t.u>(uint64_t)0x47efffffe0000000ull){
+  if(t.u>(uint64_t)0x47efffffe0000000ull){ // t > 0x1.fffffep+127
 #ifdef CORE_MATH_SUPPORT_ERRNO
-    if(c>0x1.fffffep127f) errno = ERANGE;
+    b32u32_u v = {.f = c};
+    /* Same trick as above, but here overflow also happens when r >= 2^128
+       and rounding towards zero or downwards. */
+    if(v.u > 0x7f7fffffu || r >= 0x1p128) errno = ERANGE; // overflow
 #endif
     return c;
   }
-  if(__builtin_expect(((t.u + 1)&0xfffffff) > 2, 1)) return c;
+  if(__builtin_expect(((t.u + 1)&0xfffffff) > 2, 1)) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    if (t.f < 0x1p-126)
+      errno = ERANGE; // underflow
+#endif
+    return c;
+  }
   double cd = c;
   if((cd*cd - x2) - y2 == 0.0) return c;
   double ir2 = 0.5/r2, dr2 = (x2 - r2) + y2;

@@ -159,45 +159,6 @@ is_equal (float x, float y)
   return asuint (x) == asuint (y);
 }
 
-int underflow_before; // non-zero if processor raises underflow before rounding
-
-// return non-zero if the processor raises underflow before rounding
-// (e.g., aarch64)
-static void
-check_underflow_before (void)
-{
-  fexcept_t flag;
-  fegetexceptflag (&flag, FE_ALL_EXCEPT); // save flags
-  fesetround (FE_TONEAREST);
-  feclearexcept (FE_UNDERFLOW);
-  float x = 0x1p-126f;
-  float y = __builtin_fmaf (-x, x, x);
-  if (x == y) // this is needed otherwise the compiler says y is unused
-    underflow_before = fetestexcept (FE_UNDERFLOW);
-  fesetexceptflag (&flag, FE_ALL_EXCEPT); //restore flags
-}
-
-/* In case of underflow before rounding and |z| = 2^-126, raises the MPFR
-   underflow exception if |f(x,y)| < 2^-126. */
-static void
-fix_spurious_underflow (float x, float y, float z)
-{
-  if (!underflow_before || __builtin_fabsf (z) != 0x1p-126f)
-    return;
-  // the processor raises underflow before rounding, and |z| = 2^-126
-  mpfr_t t, u;
-  mpfr_init2 (t, 24);
-  mpfr_init2 (u, 24);
-  mpfr_set_flt (t, x, MPFR_RNDN); // exact
-  mpfr_set_flt (u, y, MPFR_RNDN); // exact
-  mpfr_function_under_test (t, t, u, MPFR_RNDZ);
-  mpfr_abs (t, t, MPFR_RNDN); // exact
-  if (mpfr_cmp_d (t, 0x1p-126) < 0) // |f(x,y)| < 2^-126
-    mpfr_set_underflow ();
-  mpfr_clear (t);
-  mpfr_clear (u);
-}
-
 int tests = 0, failures = 0;
 
 static void
@@ -211,7 +172,7 @@ check (float x, float y)
   ref_fesetround(rnd);
   mpfr_flags_clear (MPFR_FLAGS_INEXACT | MPFR_FLAGS_UNDERFLOW | MPFR_FLAGS_OVERFLOW);
   float z1 = ref_function_under_test(x, y);
-#ifdef CORE_MATH_CHECK_INEXACT
+#if defined(CORE_MATH_CHECK_INEXACT) || defined(CORE_MATH_SUPPORT_ERRNO)
   mpfr_flags_t inex1 = mpfr_flags_test (MPFR_FLAGS_INEXACT);
 #endif
   fesetround(rnd1[rnd]);
@@ -240,12 +201,10 @@ check (float x, float y)
   if (mpfr_flags_test (MPFR_FLAGS_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_INEXACT))
     mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
 
-  fix_spurious_underflow (x, y, z1);
-
   // check spurious/missing underflow
   if (fetestexcept (FE_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_UNDERFLOW))
   {
-    printf ("Spurious underflow exception for x=%a y=%a (z=%a)\n", x, y, z1);
+    printf ("Spurious underflow exception for x,y=%a,%a (z=%a)\n", x, y, z1);
     fflush (stdout);
 #ifndef DO_NOT_ABORT
     exit(1);
@@ -253,7 +212,7 @@ check (float x, float y)
   }
   if (!fetestexcept (FE_UNDERFLOW) && mpfr_flags_test (MPFR_FLAGS_UNDERFLOW))
   {
-    printf ("Missing underflow exception for x=%a y=%a (z=%a)\n", x, y, z1);
+    printf ("Missing underflow exception for x,y=%a,%a (z=%a)\n", x, y, z1);
     fflush (stdout);
 #ifndef DO_NOT_ABORT
     exit(1);
@@ -263,7 +222,7 @@ check (float x, float y)
   // check spurious/missing overflow
   if (fetestexcept (FE_OVERFLOW) && !mpfr_flags_test (MPFR_FLAGS_OVERFLOW))
   {
-    printf ("Spurious overflow exception for x=%a y=%a (z=%a)\n", x, y, z1);
+    printf ("Spurious overflow exception for x,y=%a,%a (z=%a)\n", x, y, z1);
     fflush (stdout);
 #ifndef DO_NOT_ABORT
     exit(1);
@@ -271,7 +230,7 @@ check (float x, float y)
   }
   if (!fetestexcept (FE_OVERFLOW) && mpfr_flags_test (MPFR_FLAGS_OVERFLOW))
   {
-    printf ("Missing overflow exception for x=%a y=%a (z=%a)\n", x, y, z1);
+    printf ("Missing overflow exception for x,y=%a,%a (z=%a)\n", x, y, z1);
     fflush (stdout);
 #ifndef DO_NOT_ABORT
     exit(1);
@@ -281,7 +240,7 @@ check (float x, float y)
 #ifdef CORE_MATH_CHECK_INEXACT
   if ((inex1 == 0) && (inex2 != 0))
   {
-    printf ("Spurious inexact exception for x=%a y=%a\n", x, y);
+    printf ("Spurious inexact exception for x,y=%a,%a\n", x, y);
     fflush (stdout);
     failures ++;
 #ifndef DO_NOT_ABORT
@@ -290,7 +249,7 @@ check (float x, float y)
   }
   if ((inex1 != 0) && (inex2 == 0))
   {
-    printf ("Missing inexact exception for x=%a y=%a\n", x, y);
+    printf ("Missing inexact exception for x,y=%a,%a\n", x, y);
     fflush (stdout);
     failures ++;
 #ifndef DO_NOT_ABORT
@@ -308,15 +267,34 @@ check (float x, float y)
   {
     if (is_nan (z1) && errno != EDOM)
     {
-      printf ("Missing errno=EDOM for x=%a y=%a (z=%a)\n", x, y, z1);
+      printf ("Missing errno=EDOM for x,y=%a,%a (z=%a)\n", x, y, z1);
       fflush (stdout);
 #ifndef DO_NOT_ABORT
       exit(1);
 #endif
     }
-    if (is_inf (z1) && errno != ERANGE)
+    if (!is_nan (z1) && errno == EDOM)
     {
-      printf ("Missing errno=ERANGE for x=%a y=%a (z=%a)\n", x, y, z1);
+      printf ("Spurious errno=EDOM for x,y=%a,%a (z=%a)\n", x, y, z1);
+      fflush (stdout);
+#ifndef DO_NOT_ABORT
+      exit(1);
+#endif
+    }
+    int expected_erange = (is_inf (z1) && inex1 == 0) ||
+      mpfr_flags_test (MPFR_FLAGS_OVERFLOW) ||
+      mpfr_flags_test (MPFR_FLAGS_UNDERFLOW);
+    if (expected_erange && errno != ERANGE)
+    {
+      printf ("Missing errno=ERANGE for x,y=%a,%a (z=%a)\n", x, y, z1);
+      fflush (stdout);
+#ifndef DO_NOT_ABORT
+      exit(1);
+#endif
+    }
+    if (!expected_erange && errno == ERANGE)
+    {
+      printf ("Spurious errno=ERANGE for x,y=%a,%a (z=%a)\n", x, y, z1);
       fflush (stdout);
 #ifndef DO_NOT_ABORT
       exit(1);
@@ -399,7 +377,7 @@ check_signaling_nan (void)
   int flag = fetestexcept (FE_INVALID);
   if (!flag)
   {
-    printf ("Missing invalid exception for x=%a y=%a\n", snan, 1.0f);
+    printf ("Missing invalid exception for x,y=%a,%a\n", snan, 1.0f);
     exit (1);
   }
 
@@ -424,7 +402,7 @@ check_signaling_nan (void)
   flag = fetestexcept (FE_INVALID);
   if (!flag)
   {
-    printf ("Missing invalid exception for x=%a y=%a\n", -1.0f, snan);
+    printf ("Missing invalid exception for x,y=%a,%a\n", -1.0f, snan);
     exit (1);
   }
 
@@ -450,7 +428,7 @@ check_signaling_nan (void)
   flag = fetestexcept (FE_INVALID);
   if (!flag)
   {
-    printf ("Missing invalid exception for x=%a y=%a\n", snan, 1.0f);
+    printf ("Missing invalid exception for x,y=%a,%a\n", snan, 1.0f);
     exit (1);
   }
 
@@ -475,7 +453,7 @@ check_signaling_nan (void)
   flag = fetestexcept (FE_INVALID);
   if (!flag)
   {
-    printf ("Missing invalid exception for x=%a y=%a\n", -1.0f, snan);
+    printf ("Missing invalid exception for x,y=%a,%a\n", -1.0f, snan);
     exit (1);
   }
 }
@@ -515,8 +493,6 @@ main (int argc, char *argv[])
           exit (1);
         }
     }
-
-  check_underflow_before ();
 
   doloop();
 

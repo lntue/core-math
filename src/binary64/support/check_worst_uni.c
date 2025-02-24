@@ -174,8 +174,6 @@ is_equal (double x, double y)
   return asuint64 (x) == asuint64 (y);
 }
 
-int underflow_before; // non-zero if processor raises underflow before rounding
-
 // return 1 if failure, 0 otherwise
 static int
 check (testcase ts)
