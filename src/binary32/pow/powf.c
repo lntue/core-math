@@ -1,6 +1,6 @@
 /* Correctly-rounded power function for binary32 values.
 
-Copyright (c) 2022-2024 Alexei Sibidanov and Paul Zimmermann
+Copyright (c) 2022-2025 Alexei Sibidanov and Paul Zimmermann
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -219,12 +219,14 @@ is_exact (float x, float y)
      (b) y integer, 0 <= y <= 15
      (c) y<0: x=1 or (x=2^e and |y|=n*2^-k with 2^k dividing e)
      (d) y>0: y=n*2^f with -4 <= f <= -1 and 1 <= n <= 15
-     In cases (b)-(d), the low 20 bits of the encoding of y are zero,
-     thus we use that for an early exit test. */
+     In cases (b)-(d), the low 16 bits of the encoding of y are zero,
+     thus we use that for an early exit test.
+     (For case (c), x=0x1p+1 and y=-0x1.2ap+7, only 16 low bits of the
+     encoding of y are zero.) */
 
   b32u32_u v = {.f = x}, w = {.f = y};
   if (__builtin_expect ((v.u << 1) != 0x7f000000 && // |x| <> 1
-                        (w.u << 12) != 0, 1))
+                        (w.u << (32 - 16)) != 0, 1))
     return 0;
 
   if (__builtin_expect ((v.u << 1) == 0x7f000000, 0)) // |x| = 1
@@ -464,7 +466,7 @@ float cr_powf(float x0, float y0){
   z = l*y + zt;
   if(__builtin_expect(z>2048, 0)){
 #ifdef CORE_MATH_SUPPORT_ERRNO
-    errno = ERANGE;
+    errno = ERANGE; // overflow
 #endif
     if(isodd(y0))
       return __builtin_copysignf(0x1p127f, x0)*0x1p127f;
@@ -474,7 +476,7 @@ float cr_powf(float x0, float y0){
   }
   if(__builtin_expect(z<-2400, 0)){
 #ifdef CORE_MATH_SUPPORT_ERRNO
-    errno = ERANGE;
+    errno = ERANGE; // underflow
 #endif
     if(isodd(y0))
       return __builtin_copysignf(0x1p-126f, x0)*0x1p-126f;
@@ -511,8 +513,13 @@ float cr_powf(float x0, float y0){
   if(!(kk<<1)&&kk) rr.f = __builtin_copysign(rr.f,x);
   float res = rr.f;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-  if (is_inf (res))
-    errno = ERANGE;
+  /* It is not enough to check if res is infinite, since for rounding towards
+     zero, we have overflow for x^y >= 2^128, but res = MAX_FLT.
+     It is also not enough to check if rr >= 2^128, since for rounding upwards,
+     we have overflow for MAX_DBL < rr < 2^128. */
+  if (is_inf (res) || __builtin_fabs (rr.f) >= 0x1p128 ||
+      __builtin_fabs (rr.f) < 0x1p-126)
+    errno = ERANGE; // overflow or underflow
 #endif
   return res;
 }
@@ -627,5 +634,9 @@ static float as_powf_accurate2(float x0, float y0, int is_exact, FLAG_T flag){
   float res = eh;
   if (is_exact)
     set_flag (flag);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  if (__builtin_fabsf (res) < 0x1p-126f && !is_exact)
+    errno = ERANGE;
+#endif
   return res;
 }
