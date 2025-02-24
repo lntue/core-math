@@ -260,9 +260,7 @@ check (float x, float y)
 
   // check errno
 #ifdef CORE_MATH_SUPPORT_ERRNO
-  /* If x,y are normal numbers and z is NaN, we should have errno = EDOM.
-     If x,y are normal numbers and z is +/-Inf, we should have errno = ERANGE.
-  */
+  // If x,y are normal numbers and z is NaN, we should have errno = EDOM.
   if (!is_nan (x) && !is_inf (x) && !is_nan (y) && !is_inf (y))
   {
     if (is_nan (z1) && errno != EDOM)
