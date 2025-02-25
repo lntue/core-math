@@ -1,7 +1,7 @@
 /* Correctly-rounded inverse hyperbolic sine function for the
    binary64 floating point format.
 
-Copyright (c) 2023 Alexei Sibidanov.
+Copyright (c) 2023-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -26,6 +26,7 @@ SOFTWARE.
 */
 
 #include <stdint.h>
+#include <errno.h>
 
 // Warning: clang also defines __GNUC__
 #if defined(__GNUC__) && !defined(__clang__)
@@ -182,7 +183,12 @@ double cr_asinh(double x){
     // for |x| < 0x1p-1022 we have underflow but not for 0x1p-1022 (to nearest)
     if(__builtin_expect(u<0x3e57137449123ef7, 0)){ // |x| < 0x1.7137449123ef7p-26
       if(__builtin_expect(!u, 0)) return x;
-      return __builtin_fma(-0x1p-60,x,x);
+      double res = __builtin_fma(-0x1p-60,x,x);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      if (__builtin_fabs (res) < 0x1p-1022)
+        errno = ERANGE; // underflow
+#endif
+      return res;
     }
     double x2h = x*x, x2l = __builtin_fma(x, x, -x2h);
     double x3h = x2h*x, sl;
