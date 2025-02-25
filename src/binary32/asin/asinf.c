@@ -71,8 +71,15 @@ float cr_asinf(float x){
     if (__builtin_expect(ax<115<<24, 0)) { // |x| < 0x1p-12
       float res = __builtin_fmaf(x, 0x1p-25, x);
 #ifdef CORE_MATH_SUPPORT_ERRNO
-      if (x != 0 &&
-          (__builtin_fabsf (x) < 0x1p-126 || __builtin_fabsf (res) < 0x1p-126))
+      /* The Taylor expansion of asin(x) at x=0 is x + x^3/6 + o(x^3),
+         thus for |x| >= 2^-126 we have no underflow, whatever the
+         rounding mode.
+         For |x| < 2^-126 and rounding towards zero, we have underflow.
+         For x = nextbelow(2^-126) = 0x1.fffffcp-127, asin(x) would round
+         to 0x1.fffffep-127 with unbounded exponent range, which is not
+         representable, thus we have underflow too.
+         In summary, we have underflow whenever |x| < 2^-126. */
+      if (x != 0 && __builtin_fabsf (x) < 0x1p-126f)
         errno = ERANGE; // underflow
 #endif
           return res;

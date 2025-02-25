@@ -99,7 +99,15 @@ float cr_asinpif(float x){
     c4 += c6*z4;
     c0 += c4*(z4*z4);
 #ifdef CORE_MATH_SUPPORT_ERRNO
-    if (__builtin_expect(ax <= 0x1.921fb4p-126f && ax != 0.0f, 0))
+    /* For rounding towards zero, the largest positive number for which there
+       is underflow is 0x1.921fb4p-125.
+       For rounding to nearest, it is 0x1.921fb4p-125 too (although the result
+       is 0x1p-126).
+       For rounding upwards, it is 0x1.921fb2p-125. */
+#define THRESHOLD 0x1.fffffe632357dp-127
+    if (ax != 0.0f && (__builtin_fabsf (x) <= 0x1.921fb2p-125f ||
+                       (__builtin_fabsf (x) == 0x1.921fb4p-125f &&
+                        __builtin_fabs ((double) x * ch[0][0]) <= THRESHOLD)))
       errno = ERANGE; // underflow
 #endif
     return z*c0;
