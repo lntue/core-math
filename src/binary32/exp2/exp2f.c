@@ -1,6 +1,6 @@
 /* Correctly-rounded 2^x function for binary32 value.
 
-Copyright (c) 2023 Alexei Sibidanov.
+Copyright (c) 2023-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -42,6 +42,7 @@ SOFTWARE.
 typedef union {float f; uint32_t u;} b32u32_u;
 typedef union {double f; uint64_t u;} b64u64_u;
 
+// deal with x=nan, x < -149 and x >= 128
 static float as_special(float x){
   b32u32_u t = {.f = x};
   uint32_t ux = t.u<<1;
@@ -50,18 +51,19 @@ static float as_special(float x){
     static const float ir[] = {__builtin_inff(), 0.0f};
     return ir[t.u>>31]; // x = +-inf
   }
-  if(t.u>=0xc3150000u){
+  if(t.u>=0xc3150000u){ // x < -149
     double z = x, y = 0x1p-149 + (z + 149)*0x1p-150;
     y = __builtin_fmax(y, 0x1p-151);
     float r = y;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-    if(r==0.0f) errno = ERANGE;
+    errno = ERANGE; // underflow
 #endif
     return r;
-  } 
+  }
+  // now x >= 128
   float r = 0x1p127f * 0x1p127f;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-  if(r>0x1.fffffep127f) errno = ERANGE;
+  errno = ERANGE; // overflow
 #endif
   return r;
 }
@@ -106,9 +108,10 @@ float cr_exp2f(float x){
   }
   uint32_t ux = t.u<<1;
   if (__builtin_expect(ux>=0x86000000u || ux<0x65000000u, 0)){
-    // |x| >= 128 or |x| < 0x1p-26
-    if(__builtin_expect(ux<0x65000000u, 1)) return 1.0f + x;
-    if(!(t.u>=0xc3000000 && t.u<0xc3150000u)) return as_special(x);
+    // |x| >= 128 or x=nan or |x| < 0x1p-26
+    if(__builtin_expect(ux<0x65000000u, 1)) return 1.0f + x; // |x| < 0x1p-26
+    // if x < -149 or 128 <= x we call as_special()
+    if(!(t.u>=0xc3000000u && t.u<0xc3150000u)) return as_special(x);
   }
   double offd = 0x1.8p46, xd = x, h = xd - ((xd + offd) - offd), h2 = h*h;
   b32u32_u u = {.f = x + 0x1.8p17f};
@@ -129,5 +132,10 @@ float cr_exp2f(float x){
     r = sv.f + (sv.f*h)*((c[0] + h*c[1]) + h2*((c[2] + h*c[3]) + h2*(c[4] + h*c[5])));
     ub = r;
   }
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  // for x < -126, exp2(x) underflows, whatever the rounding mode
+  if (x < -126.0f)
+    errno = ERANGE; // underflow
+#endif
   return ub;
 }
