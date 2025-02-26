@@ -1,6 +1,6 @@
 /* Correctly-rounded 10^x function for binary32 value.
 
-Copyright (c) 2023 Alexei Sibidanov.
+Copyright (c) 2023-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -95,28 +95,27 @@ float cr_exp10f(float x){
   double z = x;
   uint32_t ux = t.u<<1;
   if (__builtin_expect(ux>0x84344134u || ux<0x72adf1c6u, 0)){
-    // ux>0x84344134u: |x| > 0x1.344134p+5
-    // ux<0x72adf1c6: |x| < 0x1.adf1c6p-13
-    if(ux < 0x72adf1c6u)
+    // |x| > 0x1.344134p+5 or x=nan or |x| < 0x1.adf1c6p-13
+    if(ux < 0x72adf1c6u) // |x| < 0x1.adf1c6p-13
       return 1.0 + z*(0x1.26bb1bbb55516p+1 + z*(0x1.53524c73cea69p+1 + z*0x1.0470591de2ca4p+1));
     if(ux >= 0xffu<<24) { // x is inf or nan
       if(ux > 0xffu<<24) return x + x; // x = nan
       static const float ir[] = {__builtin_inff(), 0.0f};
       return ir[t.u>>31]; // x = +-inf
     }
-    if(t.u>0xc23369f4u){
+    if(t.u>0xc23369f4u){ // x < -0x1.66d3e8p+5
       double y = 0x1p-149 + (z + 0x1.66d3e7bd9a403p+5)*0x1.a934f0979a37p-149;
       y = __builtin_fmax(y, 0x1p-151);
       float r = y;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-      if(r==0.0f) errno = ERANGE;
+      errno = ERANGE; // underflow
 #endif
       return r;
     }
     if(t.u<0x80000000u){ // x > 0x1.344134p+5
       float r = 0x1p127f * 0x1p127f;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-      if(r>0x1.fffffep127f) errno = ERANGE;
+      errno = ERANGE; // overflow
 #endif
       return r;
     }
@@ -141,5 +140,10 @@ float cr_exp10f(float x){
     r = s + w*((c[0] + h*c[1]) + h2*((c[2] + h*c[3]) + h2*(c[4] + h*c[5])));
     ub = r;
   }
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  // for x <= -0x1.2f7032p+5, exp10(x) underflows, whatever the rounding mode
+  if (x <= -0x1.2f7032p+5f)
+    errno = ERANGE; // underflow
+#endif
   return ub;
 }
