@@ -1,6 +1,6 @@
 /* Correctly-rounded inverse hyperbolic tangent function for binary32 value.
 
-Copyright (c) 2023 Alexei Sibidanov.
+Copyright (c) 2023-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -102,9 +102,22 @@ float cr_atanhf(float x){
   b32u32_u t = {.f = x};
   uint32_t ux = t.u, ax = ux<<1;
   if(__builtin_expect(ax<0x7a300000u || ax >= 0x7f000000u, 0)){
-    if(__builtin_expect(ax >= 0x7f000000u, 0)) return as_special(x);
-    if(__builtin_expect(ax < 0x73713744u, 0)) {
+    // |x| < 0x1.5a3116p-5 or x is NaN/Inf
+    if(__builtin_expect(ax >= 0x7f000000u, 0)) return as_special(x); // NaN/Inf
+    if(__builtin_expect(ax < 0x73713744u, 0)) { // |x| < 0x1.f5a956p-12
       if(!ax) return x; // x = +-0
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      /* The Taylor expansion of atanh(x) at x=0 is x + x^3/3 + o(x^3),
+         thus for |x| >= 2^-126 we have no underflow, whatever the
+         rounding mode.
+         For |x| < 2^-126 and rounding towards zero, we have underflow.
+         For x = nextbelow(2^-126) = 0x1.fffffcp-127, atanh(x) would round
+         upward to 0x1.fffffep-127 with unbounded exponent range, which is not
+         representable, thus we have underflow too.
+         In summary, we have underflow whenever |x| < 2^-126. */
+      if (__builtin_fabsf (x) < 0x1p-126f)
+        errno = ERANGE; // underflow
+#endif
       return __builtin_fmaf(x, 0x1p-25f, x); // |x| < 0.000352112(0x1.713744p-12)
     } else { // |x| < 0x1.3p-5
       static const double c[] =

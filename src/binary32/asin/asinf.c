@@ -76,7 +76,7 @@ float cr_asinf(float x){
          rounding mode.
          For |x| < 2^-126 and rounding towards zero, we have underflow.
          For x = nextbelow(2^-126) = 0x1.fffffcp-127, asin(x) would round
-         to 0x1.fffffep-127 with unbounded exponent range, which is not
+         upward to 0x1.fffffep-127 with unbounded exponent range, which is not
          representable, thus we have underflow too.
          In summary, we have underflow whenever |x| < 2^-126. */
       if (x != 0 && __builtin_fabsf (x) < 0x1p-126f)
