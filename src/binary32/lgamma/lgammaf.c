@@ -1,6 +1,6 @@
 /* Correctly-rounded logarithm of the absolute value of the gamma function for binary32 value.
 
-Copyright (c) 2023 Alexei Sibidanov.
+Copyright (c) 2023-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -165,7 +165,9 @@ float cr_lgammaf(float x){
 	float r = (x > 0x1.895f1cp+121f) ? 0x1p127f * 0x1p127f
           : 0x1.fffffep+127f + 0x1p+103f;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-	if(r>0x1.fffffep+127f) errno = ERANGE;
+	if (x > 0x1.895f1cp+121f || (x == 0x1.895f1cp+121f &&
+                                     x * 5.0f >= 0x1.ebb6e4p+123))
+          errno = ERANGE; // overflow
 #endif
 	return r;
       }
