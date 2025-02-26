@@ -43,14 +43,14 @@ float cr_asinpif(float x){
   double az = ax, z = x;
   b32u32_u t = {.f = x};
   int32_t e = (t.u>>23)&0xff;
-  if(__builtin_expect(e>=127, 0)){
-    if(ax == 1.0f) return __builtin_copysignf(0.5f, x);
-    if(e==0xff && (t.u<<9)) return x+x; // nan
+  if(__builtin_expect(e>=127, 0)){ // |x| >= 1 or nan
+    if(ax == 1.0f) return __builtin_copysignf(0.5f, x); // |x| = 1
+    if(e==0xff && (t.u<<9)) return x+x; // x = nan
 #ifdef CORE_MATH_SUPPORT_ERRNO
     errno = EDOM;
 #endif
     feraiseexcept(FE_INVALID);
-    return __builtin_nanf("1");
+    return __builtin_nanf("1"); // |x| > 1
   }
   int32_t s = 146 - e, i = 0;
   // s<32 corresponds to |x| >= 2^-12
@@ -107,7 +107,7 @@ float cr_asinpif(float x){
 #define THRESHOLD 0x1.fffffe632357dp-127
     if (ax != 0.0f && (__builtin_fabsf (x) <= 0x1.921fb2p-125f ||
                        (__builtin_fabsf (x) == 0x1.921fb4p-125f &&
-                        __builtin_fabs ((double) x * ch[0][0]) <= THRESHOLD)))
+                        __builtin_fabs (z * ch[0][0]) <= THRESHOLD)))
       errno = ERANGE; // underflow
 #endif
     return z*c0;
