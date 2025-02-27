@@ -1,6 +1,6 @@
 /* Correctly-rounded tangent of binary32 value for angles in half-revolutions
 
-Copyright (c) 2022 Alexei Sibidanov.
+Copyright (c) 2022-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -104,6 +104,12 @@ float cr_tanpif(float x){
     // now necessarily k=6
     return -1.0f/0.0f; // x = -1/2 mod 2
   }
+
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    if (__builtin_fabsf (x) <= 0x1.45f306p-128f)
+      errno = ERANGE; // underflow
+#endif
+
   ix.f = zf;
   uint32_t a = ix.u&(~0u>>1);
   // x=0x1.267004p-2 is not correctly rounded for RNDZ/RNDD by the code below
