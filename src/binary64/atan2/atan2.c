@@ -199,10 +199,17 @@ atan2_accurate (double y, double x)
 {
   fexcept_t flag;
   fegetexceptflag (&flag, FE_UNDERFLOW | FE_OVERFLOW); // save flags
+  int underflow;
   double res;
   /* First check when t=y/x is small and exact and x > 0, since for
      |t| <= 0x1.d12ed0af1a27fp-27, atan(t) rounds to t (to nearest). */
+  feclearexcept (FE_UNDERFLOW); // clear underflow flag
   double t = y / x;
+
+  /* If t = y/x did underflow for x > 0, then atan(y/x) will underflow
+     too, since the Taylor expansion of atan(z) is z - z^3/3 + o(z^3) */
+  underflow = x > 0 && fetestexcept (FE_UNDERFLOW);
+
   /* If t is exact and underflows, then atan(y/x) rounds to t for x > 0,
      to pi for y > 0 and x < 0, and to -pi for x, y < 0. */
   if (t == 0) {
@@ -347,7 +354,7 @@ atan2_accurate (double y, double x)
   }
   res = tint_tod (z, err, y, x);
  end:
-  if (__builtin_fabs (res) >= 0x1p-1022)
+  if (!underflow)
     fesetexceptflag (&flag, FE_UNDERFLOW); // restore underflow flag
   fesetexceptflag (&flag, FE_OVERFLOW); // restore overflow flag
   return res;
