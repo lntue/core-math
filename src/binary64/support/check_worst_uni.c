@@ -53,15 +53,9 @@ static int rnd2[] = { MPFR_RNDN, MPFR_RNDZ, MPFR_RNDU, MPFR_RNDD };
 int rnd = 0;
 
 typedef union { double f; uint64_t i; } d64u64;
-typedef struct {
-  double x;
-#ifdef CORE_MATH_SUPPORT_ERRNO
-  int errno_ref;
-#endif
-} testcase;
 
 static void
-readstdin(testcase **result, int *count)
+readstdin(double **result, int *count)
 {
   char *buf = NULL;
   size_t buflength = 0;
@@ -69,7 +63,7 @@ readstdin(testcase **result, int *count)
   int allocated = 512;
 
   *count = 0;
-  if (NULL == (*result = malloc(allocated * sizeof(testcase)))) {
+  if (NULL == (*result = malloc(allocated * sizeof(double)))) {
     fprintf(stderr, "malloc failed\n");
     exit(1);
   }
@@ -78,7 +72,7 @@ readstdin(testcase **result, int *count)
     if (n > 0 && buf[0] == '#') continue;
     if (*count >= allocated) {
       int newsize = 2 * allocated;
-      testcase *newresult = realloc(*result, newsize * sizeof(testcase));
+      double *newresult = realloc(*result, newsize * sizeof(double));
       if (NULL == newresult) {
         fprintf(stderr, "realloc(%d) failed\n", newsize);
         exit(1);
@@ -86,7 +80,7 @@ readstdin(testcase **result, int *count)
       allocated = newsize;
       *result = newresult;
     }
-    testcase *item = *result + *count;
+    double *item = *result + *count;
 
     // special code for snan, since glibc does not read them
     if (strncmp (buf, "snan", 4) == 0 || strncmp (buf, "+snan", 5) == 0)
@@ -94,40 +88,17 @@ readstdin(testcase **result, int *count)
       /* According to IEEE 754-2019, qNaN's have 1 as upper bit of their
          52-bit significand, and sNaN's have 0 */
       d64u64 u = {.i = 0x7ff4000000000000};
-      item->x = u.f;
+      *item = u.f;
       (*count)++;
     }
     else if (strncmp (buf, "-snan", 5) == 0)
     {
       d64u64 u = {.i = 0xfff4000000000000};
-      item->x = u.f;
+      *item = u.f;
       (*count)++;
     }
-#ifndef CORE_MATH_SUPPORT_ERRNO
-    else if (sscanf(buf, "%la", &(item->x)) == 1)
+    else if (sscanf(buf, "%la", item) == 1)
       (*count)++;
-#else
-    else {
-      char err_str[8];
-      int readcnt = sscanf(buf, "%la,%7s", &(item->x), err_str);
-      if (readcnt == 1) {
-        item->errno_ref = 0;
-        (*count)++;
-      }
-      else if (readcnt == 2) {
-        if (strncmp(err_str, "ERANGE", 7U) == 0) {
-          item->errno_ref = ERANGE;
-        }
-        else if (strncmp(err_str, "EDOM", 5U) == 0) {
-          item->errno_ref = EDOM;
-        }
-        else {
-          item->errno_ref = 0;
-        }
-        (*count)++;
-      }
-    }
-#endif
   }
 }
 
@@ -202,12 +173,12 @@ fix_underflow (double x, double y)
 
 // return 1 if failure, 0 otherwise
 static int
-check (testcase ts)
+check (double x)
 {
   ref_init();
   ref_fesetround(rnd);
   mpfr_flags_clear (MPFR_FLAGS_INEXACT | MPFR_FLAGS_UNDERFLOW | MPFR_FLAGS_OVERFLOW);
-  double z1 = ref_function_under_test(ts.x);
+  double z1 = ref_function_under_test(x);
 #if defined(CORE_MATH_CHECK_INEXACT) || defined(CORE_MATH_SUPPORT_ERRNO)
   mpfr_flags_t inex1 = mpfr_flags_test (MPFR_FLAGS_INEXACT);
 #endif
@@ -216,10 +187,10 @@ check (testcase ts)
 #ifdef CORE_MATH_SUPPORT_ERRNO
   errno = 0;
 #endif
-  double z2 = cr_function_under_test(ts.x);
+  double z2 = cr_function_under_test(x);
   /* Note: the test z1 != z2 would not distinguish +0 and -0. */
   if (is_equal (z1, z2) == 0) {
-    printf("FAIL x=%la ref=%la z=%la\n", ts.x, z1, z2);
+    printf("FAIL x=%la ref=%la z=%la\n", x, z1, z2);
     fflush(stdout);
 #ifdef DO_NOT_ABORT
     return 1;
@@ -234,12 +205,12 @@ check (testcase ts)
   if (mpfr_flags_test (MPFR_FLAGS_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_INEXACT))
     mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
 
-  fix_underflow (ts.x, z1);
+  fix_underflow (x, z1);
 
   // Check for spurious/missing underflow exception
   if (fetestexcept (FE_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_UNDERFLOW))
   {
-    printf ("Spurious underflow exception for x=%la (y=%la)\n", ts.x, z1);
+    printf ("Spurious underflow exception for x=%la (y=%la)\n", x, z1);
     fflush (stdout);
 #ifdef DO_NOT_ABORT
     return 1;
@@ -249,7 +220,7 @@ check (testcase ts)
   }
   if (!fetestexcept (FE_UNDERFLOW) && mpfr_flags_test (MPFR_FLAGS_UNDERFLOW))
   {
-    printf ("Missing underflow exception for x=%la (y=%la)\n", ts.x, z1);
+    printf ("Missing underflow exception for x=%la (y=%la)\n", x, z1);
     fflush (stdout);
 #ifdef DO_NOT_ABORT
     return 1;
@@ -261,7 +232,7 @@ check (testcase ts)
   /* Check for spurious/missing overflow exception */
   if (fetestexcept (FE_OVERFLOW) && !mpfr_flags_test (MPFR_FLAGS_OVERFLOW))
   {
-    printf ("Spurious overflow exception for x=%la (y=%la)\n", ts.x, z1);
+    printf ("Spurious overflow exception for x=%la (y=%la)\n", x, z1);
     fflush (stdout);
 #ifdef DO_NOT_ABORT
     return 1;
@@ -271,7 +242,7 @@ check (testcase ts)
   }
   if (!fetestexcept (FE_OVERFLOW) && mpfr_flags_test (MPFR_FLAGS_OVERFLOW))
   {
-    printf ("Missing overflow exception for x=%la (y=%la)\n", ts.x, z1);
+    printf ("Missing overflow exception for x=%la (y=%la)\n", x, z1);
     fflush (stdout);
 #ifdef DO_NOT_ABORT
     return 1;
@@ -284,7 +255,7 @@ check (testcase ts)
   int inex2 = fetestexcept (FE_INEXACT);
   if ((inex1 == 0) && (inex2 != 0))
   {
-    printf ("Spurious inexact exception for x=%la (y=%la)\n", ts.x, z1);
+    printf ("Spurious inexact exception for x=%la (y=%la)\n", x, z1);
     fflush (stdout);
 #ifdef DO_NOT_ABORT
     return 1;
@@ -294,7 +265,7 @@ check (testcase ts)
   }
   if ((inex1 != 0) && (inex2 == 0))
   {
-    printf ("Missing inexact exception for x=%la (y=%la)\n", ts.x, z1);
+    printf ("Missing inexact exception for x=%la (y=%la)\n", x, z1);
     fflush (stdout);
 #ifdef DO_NOT_ABORT
     return 1;
@@ -307,11 +278,11 @@ check (testcase ts)
   // check errno
 #ifdef CORE_MATH_SUPPORT_ERRNO
   // If x is a normal number and y is NaN, we should have errno = EDOM.
-  if (!is_nan (ts.x) && !is_inf (ts.x))
+  if (!is_nan (x) && !is_inf (x))
   {
     if (is_nan (z1) && errno != EDOM)
     {
-      printf ("Missing errno=EDOM for x=%la (y=%la)\n", ts.x, z1);
+      printf ("Missing errno=EDOM for x=%la (y=%la)\n", x, z1);
       fflush (stdout);
 #ifdef DO_NOT_ABORT
       return 1;
@@ -321,7 +292,7 @@ check (testcase ts)
     }
     if (!is_nan (z1) && errno == EDOM)
     {
-      printf ("Spurious errno=EDOM for x=%la (y=%la)\n", ts.x, z1);
+      printf ("Spurious errno=EDOM for x=%la (y=%la)\n", x, z1);
       fflush (stdout);
 #ifdef DO_NOT_ABORT
       return 1;
@@ -337,7 +308,7 @@ check (testcase ts)
       mpfr_flags_test (MPFR_FLAGS_UNDERFLOW);
     if (expected_erange && errno != ERANGE)
     {
-      printf ("Missing errno=ERANGE for x=%la (y=%la)\n", ts.x, z1);
+      printf ("Missing errno=ERANGE for x=%la (y=%la)\n", x, z1);
       fflush (stdout);
 #ifdef DO_NOT_ABORT
       return 1;
@@ -347,7 +318,7 @@ check (testcase ts)
     }
     if (!expected_erange && errno == ERANGE)
     {
-      printf ("Spurious errno=ERANGE for x=%la (y=%la)\n", ts.x, z1);
+      printf ("Spurious errno=ERANGE for x=%la (y=%la)\n", x, z1);
       fflush (stdout);
 #ifdef DO_NOT_ABORT
       return 1;
@@ -363,7 +334,7 @@ check (testcase ts)
 void
 doloop(void)
 {
-  testcase *items;
+  double *items;
   int count, tests = 0, failures = 0;
 
   readstdin(&items, &count);
@@ -372,14 +343,14 @@ doloop(void)
 #pragma omp parallel for reduction(+: failures,tests)
 #endif
   for (int i = 0; i < count; i++) {
-    testcase ts = items[i];
+    double x = items[i];
     tests ++;
-    if (check (ts))
+    if (check (x))
       failures ++;
 #ifdef WORST_SYMMETRIC
     tests ++;
-    ts.x = -ts.x;
-    if (check (ts))
+    x = -x;
+    if (check (x))
       failures ++;
 #endif
   }

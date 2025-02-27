@@ -56,9 +56,6 @@ typedef double double2[2];
 typedef struct {
   double x;
   double y;
-#ifdef CORE_MATH_SUPPORT_ERRNO
-  int errno_ref;
-#endif
 } testcase;
 
 typedef union { double f; uint64_t i; } d64u64;
@@ -111,30 +108,8 @@ readstdin(testcase **result, int *count)
       *result = newresult;
     }
     testcase *item = *result + *count;
-#ifndef CORE_MATH_SUPPORT_ERRNO
     if (sscanf(buf, "%la,%la", &item->x, &item->y) == 2)
       (*count)++;
-#else
-    char err_str[8];
-    int readcnt = sscanf(buf, "%la,%la,%7s", &item->x, &item->y, err_str);
-    if (readcnt == 2) {
-      item->errno_ref = 0;
-      (*count)++;
-    }
-    else if (readcnt == 3) {
-      if (strncmp(err_str, "ERANGE", 7U) == 0) {
-        item->errno_ref = ERANGE;
-      }
-      else if (strncmp(err_str, "EDOM", 5U) == 0) {
-        item->errno_ref = EDOM;
-      }
-      else {
-        item->errno_ref = 0;
-      }
-
-      (*count)++;
-    }
-#endif
     else if (sscanf_snan (buf, &item->x) == 1)
     {
       char *tbuf = buf;
