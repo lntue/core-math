@@ -57,7 +57,7 @@ float cr_atanf(float x){
          For |x| < 2^-126, since |atan(x)| < |x|, we always have underflow.
          For |x| = 2^-126, we have underflow for rounding towards zero,
          i.e., when atan(x) rounds to nextbelow(2^-126).
-         In summary, we have underflow whenever |x| < 2^-126 or |res| < 2^-126. */
+         In summary, we have underflow whenever |x|<2^-126 or |res|<2^-126. */
       if (__builtin_fabsf (x) < 0x1p-126f || __builtin_fabsf (res) < 0x1p-126f)
         errno = ERANGE; // underflow
 #endif

@@ -46,6 +46,7 @@ int ref_fesetround (int);
 void ref_init (void);
 
 int rnd1[] = { FE_TONEAREST, FE_TOWARDZERO, FE_UPWARD, FE_DOWNWARD };
+int rnd2[] = { MPFR_RNDN,    MPFR_RNDZ,     MPFR_RNDU, MPFR_RNDD   };
 
 int rnd = 0;
 
@@ -159,6 +160,34 @@ is_equal (float x, float y)
   return asuint (x) == asuint (y);
 }
 
+/* For |z| = 2^-126 and underflow after rounding, clear the MPFR
+   underflow exception when the rounded result (with unbounded exponent)
+   equals +/-2^-126 (might be set due to a bug in MPFR <= 4.2.1). */
+static void
+fix_underflow (float x, float y, float z)
+{
+  if (__builtin_fabsf (z) != 0x1p-126)
+    return;
+  mpfr_t t, u;
+  mpfr_init2 (t, 24);
+  mpfr_init2 (u, 24);
+  fexcept_t flag;
+  fegetexceptflag (&flag, FE_ALL_EXCEPT); // save flags
+  mpfr_set_flt (t, x, MPFR_RNDN); // exact
+  mpfr_set_flt (u, y, MPFR_RNDN); // exact
+  /* mpfr_set_flt might raise the processor underflow/overflow/inexact flags
+     (https://gitlab.inria.fr/mpfr/mpfr/-/issues/2) */
+  fesetexceptflag (&flag, FE_ALL_EXCEPT); // restore flags
+  mpfr_function_under_test (t, t, u, rnd2[rnd]);
+  /* don't call mpfr_subnormalize here since we precisely want an unbounded
+     exponent */
+  mpfr_abs (t, t, MPFR_RNDN); // exact
+  if (mpfr_cmp_ui_2exp (t, 1, -126) == 0) // |o(f(x,y))| = 2^-126
+    mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
+  mpfr_clear (t);
+  mpfr_clear (u);
+}
+
 int tests = 0, failures = 0;
 
 static void
@@ -200,6 +229,8 @@ check (float x, float y)
      exception in this case: we clear it to mimic IEEE 754-2019. */
   if (mpfr_flags_test (MPFR_FLAGS_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_INEXACT))
     mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
+
+  fix_underflow (x, y, z1);
 
   // check spurious/missing underflow
   if (fetestexcept (FE_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_UNDERFLOW))

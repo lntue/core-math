@@ -1,6 +1,6 @@
 /* Correctly-rounded true gamma function for binary32 value.
 
-Copyright (c) 2023-2024 Alexei Sibidanov.
+Copyright (c) 2023-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -106,7 +106,15 @@ float cr_tgammaf(float x){
     double f = 1.0/z + d;
     float r = f;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-    if(__builtin_fabsf(r)>0x1.fffffep+127f) errno = ERANGE;
+    /* tgamma(x) overflows for:
+     * 0 <= x < 0x1p-128 whatever the rounding mode
+     * x = 0x1p-128 and rounding to nearest or away from zero
+       (in which case the result is +Inf)
+     * -0x1p-128 <= x <= 0 whatever the rounding mode
+     */
+    if (__builtin_fabsf (x) < 0x1p-128f ||
+        (x == 0x1p-128f && r > 0x1.fffffep+127f) || x == -0x1p-128f)
+      errno = ERANGE; // overflow
 #endif
     b64u64_u rt = {.f = f};
     if(((rt.u+2)&0xfffffff) < 4){
@@ -176,7 +184,8 @@ float cr_tgammaf(float x){
   b64u64_u rt = {.f = f};
   float r = f;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-  if(__builtin_expect(r==0.0f, 0)) errno = ERANGE;
+  if (__builtin_fabsf (r) < 0x1p-126f)
+    errno = ERANGE; // underflow
 #endif
   /* Deal with exceptional cases.  */
   if(__builtin_expect(((rt.u+2)&0xfffffff) < 8, 0)){

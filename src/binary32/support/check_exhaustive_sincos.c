@@ -47,6 +47,7 @@ void ref_init (void);
 /* the code below is to check correctness by exhaustive search */
 
 int rnd1[] = { FE_TONEAREST, FE_TOWARDZERO, FE_UPWARD, FE_DOWNWARD };
+int rnd2[] = { MPFR_RNDN,    MPFR_RNDZ,     MPFR_RNDU, MPFR_RNDD   };
 
 int rnd = 0;
 int keep = 0;
@@ -102,6 +103,40 @@ is_inf (float x)
 }
 #endif
 
+/* For |y| = 2^-126 and underflow after rounding, clear the MPFR
+   underflow exception when the rounded result (with unbounded exponent)
+   equals +/-2^-126 (might be set due to a bug in MPFR <= 4.2.1). */
+static void
+fix_underflow (float x, float y1, float y2)
+{
+  if (__builtin_fabsf (y1) != 0x1p-126f && __builtin_fabsf (y2) != 0x1p-126f)
+    return;
+  mpfr_t t, u;
+  mpfr_init2 (t, 24);
+  mpfr_init2 (u, 24);
+  fexcept_t flag;
+  fegetexceptflag (&flag, FE_ALL_EXCEPT); // save flags
+  mpfr_set_flt (t, x, MPFR_RNDN); // exact
+  /* mpfr_set_d might raise the processor underflow/overflow/inexact flags
+     (https://gitlab.inria.fr/mpfr/mpfr/-/issues/2) */
+  fesetexceptflag (&flag, FE_ALL_EXCEPT); // restore flags
+  mpfr_function_under_test (t, u, t, rnd2[rnd]);
+  /* don't call mpfr_subnormalize here since we precisely want an unbounded
+     exponent */
+  mpfr_abs (t, t, MPFR_RNDN); // exact
+  mpfr_abs (u, u, MPFR_RNDN); // exact
+  /* Check if we have the issue for one of y1 or y2,
+     while the other one does not underflow. */
+  if (mpfr_cmp_ui_2exp (t, 1, -126) == 0 && // |o(f1(x))| = 2^-126
+      mpfr_cmp_ui_2exp (u, 1, -126) >= 0)
+    mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
+  if (mpfr_cmp_ui_2exp (u, 1, -126) == 0 && // |o(f2(x))| = 2^-126
+      mpfr_cmp_ui_2exp (t, 1, -126) >= 0)
+    mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
+  mpfr_clear (t);
+  mpfr_clear (u);
+}
+
 void
 doit (uint32_t n)
 {
@@ -149,6 +184,8 @@ doit (uint32_t n)
      exception in this case: we clear it to mimic IEEE 754-2019. */
   if (mpfr_flags_test (MPFR_FLAGS_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_INEXACT))
     mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
+
+  fix_underflow (x, z1, z2);
 
   // check spurious/missing underflow
   if (fetestexcept (FE_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_UNDERFLOW))

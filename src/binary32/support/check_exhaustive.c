@@ -118,8 +118,10 @@ fix_underflow (float x, float y)
      (https://gitlab.inria.fr/mpfr/mpfr/-/issues/2) */
   fesetexceptflag (&flag, FE_ALL_EXCEPT); // restore flags
   mpfr_function_under_test (t, t, rnd2[rnd]);
+  /* don't call mpfr_subnormalize here since we precisely want an unbounded
+     exponent */
   mpfr_abs (t, t, MPFR_RNDN); // exact
-  if (mpfr_cmp_ui_2exp (t, 1, -126) == 0) // |o(f(x,y))| = 2^-126
+  if (mpfr_cmp_ui_2exp (t, 1, -126) == 0) // |o(f(x))| = 2^-126
     mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
   mpfr_clear (t);
 }

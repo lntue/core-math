@@ -69,7 +69,6 @@ float cr_asinf(float x){
   if(__builtin_expect(ax>0x7f<<24, 0)) return as_special(x);
   if(__builtin_expect(ax<0x7ec29000u, 1)){ // |x| < 0x1.7d83a6p+0
     if (__builtin_expect(ax<115<<24, 0)) { // |x| < 0x1p-12
-      float res = __builtin_fmaf(x, 0x1p-25, x);
 #ifdef CORE_MATH_SUPPORT_ERRNO
       /* The Taylor expansion of asin(x) at x=0 is x + x^3/6 + o(x^3),
          thus for |x| >= 2^-126 we have no underflow, whatever the
@@ -82,7 +81,7 @@ float cr_asinf(float x){
       if (x != 0 && __builtin_fabsf (x) < 0x1p-126f)
         errno = ERANGE; // underflow
 #endif
-          return res;
+      return __builtin_fmaf(x, 0x1p-25, x);
     }
     static const double b[] =
       {0x1.0000000000005p+0, 0x1.55557aeca105dp-3, 0x1.3314ec3db7d12p-4, 0x1.775738a5a6f92p-5,

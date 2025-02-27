@@ -220,6 +220,8 @@ fix_underflow (double x, double y, double z)
      (https://gitlab.inria.fr/mpfr/mpfr/-/issues/2) */
   fesetexceptflag (&flag, FE_ALL_EXCEPT); // restore flags
   mpfr_function_under_test (t, t, u, rnd2[rnd]);
+  /* don't call mpfr_subnormalize here since we precisely want an unbounded
+     exponent */
   mpfr_abs (t, t, MPFR_RNDN); // exact
   if (mpfr_cmp_ui_2exp (t, 1, -1022) == 0) // |o(f(x,y))| = 2^-1022
     mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
