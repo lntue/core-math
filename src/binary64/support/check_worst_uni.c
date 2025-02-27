@@ -328,6 +328,7 @@ check (double x)
     }
   }
 #endif
+
   return 0;
 }
 

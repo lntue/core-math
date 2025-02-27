@@ -103,8 +103,8 @@ is_inf (float x)
 }
 #endif
 
-/* For |y| = 2^-126 and underflow after rounding, clear the MPFR
-   underflow exception when the rounded result (with unbounded exponent)
+/* For |y1| = 2^-126 or |y2| = 2^-126, clear the MPFR underflow exception
+   when the rounded result (with unbounded exponent)
    equals +/-2^-126 (might be set due to a bug in MPFR <= 4.2.1). */
 static void
 fix_underflow (float x, float y1, float y2)
