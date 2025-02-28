@@ -1,6 +1,6 @@
 /* Correctly rounded exp2l function for binary80 values.
 
-Copyright (c) 2024 Sélène Corbineau, Alexei Sibidanov and Paul Zimmermann
+Copyright (c) 2024-2025 Sélène Corbineau, Alexei Sibidanov and Paul Zimmermann
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -46,6 +46,8 @@ SOFTWARE.
  */
 
 #include <stdint.h>
+#include <errno.h>
+#include <fenv.h>
 
 // Warning: clang also defines __GNUC__
 #if defined(__GNUC__) && !defined(__clang__)
@@ -618,9 +620,16 @@ fast_path(long double x, int* needmoreaccuracy) {
 	  wanted_exponent++;
 	}
 
-	// We had a denormal but rounding made it into the smallest normal
-	if(__builtin_expect((mh>>63) && !wanted_exponent, 0)) {
-		wanted_exponent = 1;
+	// We had a subnormal but rounding made it into the smallest normal
+        if (__builtin_expect (wanted_exponent == 0, 0)) { // subnormal case
+          if (mh>>63)
+            wanted_exponent = 1;
+          else {
+            feraiseexcept (FE_UNDERFLOW); // raise underflow
+#ifdef CORE_MATH_SUPPORT_ERRNO
+            errno = ERANGE; // underflow
+#endif
+          }
 	}
 
 	b96u96_u v;
@@ -631,7 +640,7 @@ fast_path(long double x, int* needmoreaccuracy) {
 	// ml <= eps.	This holds true because eps fits in 128-87=41 bits.
 	int b1 = (uint64_t)(ml + eps) <= (uint64_t)(2*eps);
 
-	// Denormals *inside* the computation don't seem to pause a problem
+	// Subnormals *inside* the computation don't seem to pause a problem
 	// given the error analysis (we used absolute bounds mostly)
 	// rounding test
 	*needmoreaccuracy = b1;
@@ -867,7 +876,7 @@ cr_exp2l (long double x)
   // check NaN, Inf, overflow, underflow
   // overflow for x >= 16384, i.e., 16397 <= e <= 32767
   // the smallest subnormal is 2^-16445
-  if (__builtin_expect (e >= 16383 + 15, 0))
+  if (__builtin_expect (e >= 16383 + 14, 0)) // |x| >= 2^14
   {
     if (e == 0x7fff)
     { // NaN or Inf: 2^x = x for x = NaN or +Inf, 2^-Inf = 0
@@ -876,11 +885,19 @@ cr_exp2l (long double x)
       return x+x;
     }
 
-		if(cvt_x.e&0x8000) {
-      return 0x1p-16445L * 0.25L;
-		} else {
-			return 0x1p16383L + 0x1p16383L;
-		}
+    if(cvt_x.e&0x8000) { // x <= -2^15
+      if (e >= 16383 + 15) { // x <= -2^15
+#ifdef CORE_MATH_SUPPORT_ERRNO
+        errno = ERANGE; // underflow
+#endif
+        return 0x1p-16445L * 0.25L;
+      }
+    } else {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      errno = ERANGE; // overflow
+#endif
+      return 0x1p16383L + 0x1p16383L;
+    }
   }
 
   if( __builtin_expect((cvt_x.m&0x1fffffffffffful) == 0, 0)){
@@ -889,17 +906,20 @@ cr_exp2l (long double x)
     if( k>0 && __builtin_expect((cvt_x.m<<k) == 0, 0)){
       int sgn = -(cvt_x.e>>15);
       k = ((cvt_x.m>>(64-k))^sgn) - sgn;
-			if(k>16383) {return 0x1p16383L + 0x1p16383L;}
+      if(k>16383) {return 0x1p16383L + 0x1p16383L;}
       if(k>-16383){
 				cvt_x.m = (uint64_t)1<<63;
 				cvt_x.e = k + 16383;
-      } else { // denormal
-				int shiftamnt = 16445+k;
-				if(shiftamnt <= -1) {
-					return 0x1p-16445L*.5L;
-				}
-				cvt_x.m = (uint64_t)1<<shiftamnt;
-				cvt_x.e = 0;
+      } else { // subnormal
+        int shiftamnt = 16445+k;
+        if(shiftamnt <= -1) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+          errno = ERANGE; // underflow
+#endif
+          return 0x1p-16445L*.5L;
+        }
+        cvt_x.m = (uint64_t)1<<shiftamnt;
+        cvt_x.e = 0;
       }
       return cvt_x.f;
     }
@@ -916,7 +936,6 @@ cr_exp2l (long double x)
   int needmoreaccuracy = 0;
   long double h = fast_path (x, &needmoreaccuracy);
   if(__builtin_expect(!needmoreaccuracy, 1)) return h;
-
 
   long double hi, lo;
   accurate_path (&hi, &lo, x);

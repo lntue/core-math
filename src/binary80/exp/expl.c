@@ -1,6 +1,6 @@
 /* Correctly rounded expl function for binary80 values.
 
-Copyright (c) 2024 Sélène Corbineau, Alexei Sibidanov and Paul Zimmermann
+Copyright (c) 2024-2025 Sélène Corbineau, Alexei Sibidanov and Paul Zimmermann
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
