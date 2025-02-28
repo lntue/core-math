@@ -171,6 +171,9 @@ check (long double x)
 #endif
   fesetround(rnd1[rnd]);
   feclearexcept (FE_INEXACT | FE_UNDERFLOW | FE_OVERFLOW);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  errno = 0;
+#endif
   long double z2 = cr_function_under_test(x);
 #ifdef CORE_MATH_CHECK_INEXACT
   int inex2 = fetestexcept (FE_INEXACT);

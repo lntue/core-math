@@ -37,6 +37,7 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <errno.h>
 
 #include "expl_tables.h"
 #include "tint.h"
@@ -632,7 +633,10 @@ fastpath(long double x, redinfo* ri, bool* need_accurate) {
 
 	// Infinity output case
 	if(__builtin_expect(wanted_exponent >= 32767, 0)) {
-		return 0x1p16383L + 0x1p16383L;
+#ifdef CORE_MATH_SUPPORT_ERRNO
+          errno = ERANGE; // overflow
+#endif
+          return 0x1p16383L + 0x1p16383L;
 	}
 	return v.f;
 }
@@ -1190,7 +1194,7 @@ long double cr_expl(long double x) {
 	int e = cvt_x.e & 0x7fff;
 
 
-	if (__builtin_expect(e >= 14 + 16383, 0)) {
+	if (__builtin_expect(e >= 14 + 16383, 0)) { // |x| >= 2^14
 		if(__builtin_expect(e == 0x7fff, 0)) {
 			if (cvt_x.e == 0xffff && cvt_x.m == 0x8000000000000000ul) // -Inf
 				return 0x0p0L;
@@ -1202,11 +1206,17 @@ long double cr_expl(long double x) {
 
 		// Note that exp(2^14) > 2^16384 and that exp(-2^14) < 2^-16446.
 	  if(cvt_x.e&0x8000) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+            errno = ERANGE; // underflow
+#endif
 	      return 0x1p-16445L * 0.25L;
 	  } else {
-	      return 0x1p16383L + 0x1p16383L;
+#ifdef CORE_MATH_SUPPORT_ERRNO
+            errno = ERANGE; // overflow
+#endif
+            return 0x1p16383L + 0x1p16383L;
 	  }
-	};
+	}
 
 	if(__builtin_expect(e <= -65 + 16383, 0)) { // |x| < 2^-64
 	  if(__builtin_expect(!cvt_x.m && !e, 0)) return 1.L;
