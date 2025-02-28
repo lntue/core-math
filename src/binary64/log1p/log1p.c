@@ -1,6 +1,6 @@
 /* Correctly rounded log(1+x) for binary64 values.
 
-Copyright (c) 2024 Alexei Sibidanov.
+Copyright (c) 2024-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -288,16 +288,26 @@ double cr_log1p(double x){
   b64u64_u ix = {.f = x};
   u64 ax = ix.u<<1;
   double ln1, ln0, eps;
+  /* logp1 is expected to be used for x near 0, where it is more accurate than
+     log(1+x), thus we expect x near 0 */
   if(__builtin_expect(ax<0x7f60000000000000ull, 1)){ // |x| < 0.0625
+    // check case x tiny first to avoid spurious underflow in x*x
+    if(__builtin_expect(ax<0x7940000000000000ull, 0)){ // |x| < 0x1p-53
+      if(!ax) return x;
+      /* we have underflow when |x| < 2^-1022, or when |x| = 2^-1022 and
+         the result is smaller than 2^-1022 in absolute value */
+      double res = __builtin_fma(__builtin_fabs(x), -0x1p-54, x);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      if (__builtin_fabs (x) < 0x1p-1022 || __builtin_fabs (res) < 0x1p-1022)
+        errno = ERANGE; // underflow
+#endif
+      return res;
+    }
     double x2 = x*x;
     if(__builtin_expect(ax<0x7e60000000000000ull, 1)){ // |x| < 0x1p-12
       ln1 = x;
       eps = 0x1.6p-64*x;
       if(__builtin_expect(ax<0x7d43360000000000ull, 1)){ // |x| < 0x1.19bp-21
-	if(ax<0x7940000000000000ull){ // |x| < 0x1p-53
-	  if(!ax) return x;
-	  return __builtin_fma(__builtin_fabs(x), -0x1p-54, x);
-	}
 	static const double c[] = {-0x1.00000000001d1p-1, 0x1.55555555558f7p-2};
 	ln0 = x2*(c[0] + x*c[1]);
       } else {
@@ -341,10 +351,10 @@ double cr_log1p(double x){
 	  if(ix.u==0x7ff0000000000000ull) return x; // +inf
 	  if(ix.u==0xbff0000000000000ull){ // -1
 #ifdef CORE_MATH_SUPPORT_ERRNO
-      errno = ERANGE;
+            errno = ERANGE; // pole error
 #endif
-      return -1./0.0;
-    }
+            return -1./0.0;
+          }
 #ifdef CORE_MATH_SUPPORT_ERRNO
     errno = EDOM;
 #endif

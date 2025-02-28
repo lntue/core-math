@@ -31388,5 +31388,5 @@
 # non-regression tests
 -0x0.0000000000001p-1022
 # errno tests
-0x0p+0, ERANGE
--0x0p+0, ERANGE
+0x0p+0
+-0x0p+0

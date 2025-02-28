@@ -1,6 +1,6 @@
 /* Correctly rounded exp2 function for binary64 values.
 
-Copyright (c) 2023 Alexei Sibidanov.
+Copyright (c) 2023-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -26,6 +26,7 @@ SOFTWARE.
 
 #include <stdint.h> /* for uint64_t */
 #include <errno.h>
+#include <fenv.h>
 #if defined(__x86_64__)
 #include <x86intrin.h>
 #endif
@@ -130,7 +131,9 @@ static inline double as_ldexp(double x, i64 i){
 #endif
 }
 
-static inline double as_todenormal(double x){
+// convert x, 2^52 <= x < 2^53 to subnormal range
+// if exact <> 0, raises the underflow exception
+static inline double as_todenormal(double x, int exact){
 #ifdef __x86_64__
   __m128i sb = {~(u64)0>>12, 0};
 #if defined(__clang__)
@@ -139,10 +142,16 @@ static inline double as_todenormal(double x){
   __m128d r; asm("":"=x"(r):"0"(x));
 #endif
   r = _mm_and_pd(r, (__m128d)sb);
+  if (!exact)
+    // raise the underflow exception
+    _mm_setcsr (_mm_getcsr () | _MM_EXCEPT_UNDERFLOW);
   return r[0];
 #else
   b64u64_u ix = {.f = x};
   ix.u &= ~(u64)0>>12;
+  if (!exact)
+    // raise the underflow exception
+    feraiseexcept (FE_UNDERFLOW);
   return ix.f;
 #endif
 }
@@ -302,7 +311,7 @@ static double __attribute__((cold,noinline)) as_exp2_accurate(double x){
     double e;
     fh = fasttwosum(ix.f, fh, &e);
     fl += e;
-    fh = as_todenormal(fh + fl);
+    fh = as_todenormal(fh + fl, 0);
   }
   return fh;
 }
@@ -311,24 +320,30 @@ double cr_exp2(double x){
   b64u64_u ix = {.f = x};
   u64 ax = ix.u<<1;
   if(__builtin_expect(ax == 0, 0)) return 1.0;
-  if(__builtin_expect(ax >= 0x8120000000000000ull, 0)){
+  if(__builtin_expect(ax >= 0x8120000000000000ull, 0)){ // |x| >= 1024
     if(ax  > 0xffe0000000000000ull) return x + x; // nan
-    if(ax == 0xffe0000000000000ull) return (ix.u>>63)?0.0:x;
-    if(ix.u>>63){
-      if(ix.u >= 0xc090cc0000000000ull) {
+    if(ax == 0xffe0000000000000ull) return (ix.u>>63)?0.0:x; // +/-inf
+    if(ix.u>>63){ // x <= -1024
+      if(ix.u >= 0xc090cc0000000000ull) { // x <= -1075
+#ifdef CORE_MATH_SUPPORT_ERRNO
+        errno = ERANGE; // underflow
+#endif
 	double z = 0x1p-1022;
 	return z*z;
       }
-    } else {
-      if(ix.u >= 0x4090000000000000ull){
+    } else { // x >= 1024
 #ifdef CORE_MATH_SUPPORT_ERRNO
-  errno = ERANGE;
+      errno = ERANGE; // overflow
 #endif
-	double z = 0x1p1023;
-	return z*z;
-      }
+      return 0x1p1023*x;
     }
   }
+
+  // for |x| <= 0x1.71547652b82fep-54, 2^x rounds to 1 to nearest
+  // this avoids a spurious underflow in z*z below
+  if (__builtin_expect(ax <= 0x792e2a8eca5705fcull, 0))
+    return 1.0 + __builtin_copysign (0x1p-54, x);
+
   u64 m = ix.u<<12, ex = (ax>>53) - 0x3ff, frac = ex>>63 | m<<ex;
   double sx = 4096.0*x, fx = roundeven_finite(sx), z = sx - fx, z2 = z*z;
   int64_t k = fx, i1 = k&0x3f, i0 = (k>>6)&0x3f, ie = k>>12;
@@ -339,7 +354,7 @@ double cr_exp2(double x){
     {0x1.62e42fefa39efp-13, 0x1.ebfbdff82c58fp-27, 0x1.c6b08d73b3e01p-41, 0x1.3b2ab6fdda001p-55};
   double tz = th*z, fh = th, fl = tz*((c[0] + z*c[1]) + z2*(c[2] + z*c[3])) + tl;
   double eps = 1.64e-19;
-  if(__builtin_expect(ix.u<=0xc08ff00000000000ull, 1)){
+  if(__builtin_expect(ix.u<=0xc08ff00000000000ull, 1)){ // x >= -1022
     // warning: on 32-bit machines, __builtin_expect(frac,1) does not work
     // since only the low 32 bits of frac are taken into account
     if( __builtin_expect(frac != 0, 1)){
@@ -347,16 +362,21 @@ double cr_exp2(double x){
       if(__builtin_expect( ub != fh, 0)) return as_exp2_accurate(x);
     }
     fh = as_ldexp(fh, ie);
-  } else {
+  } else { // subnormal case
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    if (frac != 0)
+      errno = ERANGE; // underflow (no underflow when 2^x is exact)
+#endif
     ix.u = ((u64)1-ie)<<52;
     double e;
     fh = fasttwosum(ix.f, fh, &e);
     fl += e;
     if(__builtin_expect(frac != 0, 1)){
       double ub = fh + (fl + eps); fh += fl - eps;
-      if(__builtin_expect( ub != fh, 0)) return as_exp2_accurate(x);
+      if (__builtin_expect(ub != fh, 0)) return as_exp2_accurate(x);
     }
-    fh = as_todenormal(fh);
+    // when 2^x is exact, no underflow should be raised
+    fh = as_todenormal (fh, frac == 0);
   }
   return fh;
 }

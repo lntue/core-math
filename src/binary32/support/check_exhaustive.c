@@ -1,4 +1,4 @@
-/* Check correctness of binary32 function by exhaustive search.
+/* Check correctness of univariate binary32 function by exhaustive search.
 
 Copyright (c) 2022 Alexei Sibidanov.
 Copyright (c) 2022 Paul Zimmermann, INRIA.
@@ -40,12 +40,14 @@ SOFTWARE.
 
 float cr_function_under_test (float);
 float ref_function_under_test (float);
+int mpfr_function_under_test (mpfr_ptr, mpfr_srcptr, mpfr_rnd_t);
 int ref_fesetround (int);
 void ref_init (void);
 
 /* the code below is to check correctness by exhaustive search */
 
 int rnd1[] = { FE_TONEAREST, FE_TOWARDZERO, FE_UPWARD, FE_DOWNWARD };
+int rnd2[] = { MPFR_RNDN,    MPFR_RNDZ,     MPFR_RNDU, MPFR_RNDD   };
 
 int rnd = 0;
 int keep = 0;
@@ -99,6 +101,31 @@ is_equal (float y1, float y2)
   return asuint (y1) == asuint (y2);
 }
 
+/* For |y| = 2^-126 and underflow after rounding, clear the MPFR
+   underflow exception when the rounded result (with unbounded exponent)
+   equals +/-2^-126 (might be set due to a bug in MPFR <= 4.2.1). */
+static void
+fix_underflow (float x, float y)
+{
+  if (__builtin_fabsf (y) != 0x1p-126f)
+    return;
+  mpfr_t t;
+  mpfr_init2 (t, 24);
+  fexcept_t flag;
+  fegetexceptflag (&flag, FE_ALL_EXCEPT); // save flags
+  mpfr_set_flt (t, x, MPFR_RNDN); // exact
+  /* mpfr_set_d might raise the processor underflow/overflow/inexact flags
+     (https://gitlab.inria.fr/mpfr/mpfr/-/issues/2) */
+  fesetexceptflag (&flag, FE_ALL_EXCEPT); // restore flags
+  mpfr_function_under_test (t, t, rnd2[rnd]);
+  /* don't call mpfr_subnormalize here since we precisely want an unbounded
+     exponent */
+  mpfr_abs (t, t, MPFR_RNDN); // exact
+  if (mpfr_cmp_ui_2exp (t, 1, -126) == 0) // |o(f(x))| = 2^-126
+    mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
+  mpfr_clear (t);
+}
+
 void
 doit (uint32_t n)
 {
@@ -106,17 +133,20 @@ doit (uint32_t n)
   x = asfloat (n);
   ref_init ();
   ref_fesetround (rnd);
-  mpfr_flags_clear (MPFR_FLAGS_INEXACT);
+  mpfr_flags_clear (MPFR_FLAGS_INEXACT | MPFR_FLAGS_UNDERFLOW | MPFR_FLAGS_OVERFLOW);
   y = ref_function_under_test (x);
-#ifdef CORE_MATH_CHECK_INEXACT
+#if defined(CORE_MATH_CHECK_INEXACT) || defined(CORE_MATH_SUPPORT_ERRNO)
   mpfr_flags_t inex_y = mpfr_flags_test (MPFR_FLAGS_INEXACT);
 #endif
   fesetround (rnd1[rnd]);
-  feclearexcept (FE_INEXACT | FE_UNDERFLOW);
+  feclearexcept (FE_INEXACT | FE_UNDERFLOW | FE_OVERFLOW);
+#ifdef CORE_MATH_SUPPORT_ERRNO
   errno = 0;
+#endif
   z = cr_function_under_test (x);
-  fexcept_t inex_z;
-  fegetexceptflag (&inex_z, FE_INEXACT);
+#ifdef CORE_MATH_CHECK_INEXACT
+  int inex_z = fetestexcept (FE_INEXACT);
+#endif
   /* Note: the test y != z would not distinguish +0 and -0, instead we compare
      the 32-bit encodings. */
   if (!is_equal (y, z))
@@ -125,13 +155,44 @@ doit (uint32_t n)
     fflush (stdout);
     if (!keep) exit (1);
   }
-  // check spurious underflow
-  if ((y < -0x1p-126f || 0x1p-126f < y) && fetestexcept (FE_UNDERFLOW))
+
+  /* When there is underflow but the result is exact, IEEE 754-2019 says the
+     underflow exception should not be signaled. However MPFR raises the
+     underflow exception in this case: we clear it to mimic IEEE 754-2019. */
+  if (mpfr_flags_test (MPFR_FLAGS_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_INEXACT))
+    mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
+
+  fix_underflow (x, y);
+
+  // check spurious/missing underflow
+  if (fetestexcept (FE_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_UNDERFLOW))
   {
     printf ("Spurious underflow exception for x=%a (y=%a)\n", x, y);
     fflush (stdout);
     if (!keep) exit (1);
   }
+  if (!fetestexcept (FE_UNDERFLOW) && mpfr_flags_test (MPFR_FLAGS_UNDERFLOW))
+  {
+    printf ("Missing underflow exception for x=%a (y=%a)\n", x, y);
+    fflush (stdout);
+    if (!keep) exit (1);
+  }
+
+  // check spurious/missing overflow
+  if (fetestexcept (FE_OVERFLOW) && !mpfr_flags_test (MPFR_FLAGS_OVERFLOW))
+  {
+    printf ("Spurious overflow exception for x=%a (y=%a)\n", x, y);
+    fflush (stdout);
+    if (!keep) exit (1);
+  }
+  if (!fetestexcept (FE_OVERFLOW) && mpfr_flags_test (MPFR_FLAGS_OVERFLOW))
+  {
+    printf ("Missing overflow exception for x=%a (y=%a)\n", x, y);
+    fflush (stdout);
+    if (!keep) exit (1);
+  }
+
+  // check inexact exception
 #ifdef CORE_MATH_CHECK_INEXACT
   if ((inex_y == 0) && (inex_z != 0))
   {
@@ -146,10 +207,10 @@ doit (uint32_t n)
     if (!keep) exit (1);
   }
 #endif
+
+  // check errno
 #ifdef CORE_MATH_SUPPORT_ERRNO
-  /* If x is a normal number and y is NaN, we should have errno = EDOM.
-     If x is a normal number and y is +/-Inf, we should have errno = ERANGE.
-  */
+  // If x is a normal number and y is NaN, we should have errno = EDOM.
   if (!is_nan (x) && !is_inf (x))
   {
     if (is_nan (y) && errno != EDOM)
@@ -158,9 +219,24 @@ doit (uint32_t n)
       fflush (stdout);
       if (!keep) exit (1);
     }
-    if (is_inf (y) && errno != ERANGE)
+    if (!is_nan (y) && errno == EDOM)
+    {
+      printf ("Spurious errno=EDOM for x=%a (y=%a)\n", x, y);
+      fflush (stdout);
+      if (!keep) exit (1);
+    }
+    int expected_erange = (is_inf (y) && inex_y == 0) ||
+      mpfr_flags_test (MPFR_FLAGS_OVERFLOW) ||
+      mpfr_flags_test (MPFR_FLAGS_UNDERFLOW);
+    if (expected_erange && errno != ERANGE)
     {
       printf ("Missing errno=ERANGE for x=%a (y=%a)\n", x, y);
+      fflush (stdout);
+      if (!keep) exit (1);
+    }
+    if (!expected_erange && errno == ERANGE)
+    {
+      printf ("Spurious errno=ERANGE for x=%a (y=%a)\n", x, y);
       fflush (stdout);
       if (!keep) exit (1);
     }
@@ -218,10 +294,9 @@ static void
 check_exceptions_aux (uint32_t n)
 {
   float x = asfloat (n);
-  fexcept_t inex;
   feclearexcept (FE_INEXACT);
   float y = cr_function_under_test (x);
-  fegetexceptflag (&inex, FE_INEXACT);
+  int inex = fetestexcept (FE_INEXACT);
   // there should be no inexact exception if the result is NaN, +/-Inf or +/-0
   if (inex && (is_nan (y) || is_inf (y) || y == 0))
   {
@@ -231,7 +306,7 @@ check_exceptions_aux (uint32_t n)
   }
   feclearexcept (FE_OVERFLOW);
   y = cr_function_under_test (x);
-  fegetexceptflag (&inex, FE_OVERFLOW);
+  inex = fetestexcept (FE_OVERFLOW);
   if (inex)
   {
     fprintf (stderr, "Error, for x=%a, overflow exception set (y=%a)\n", x, y);
@@ -239,7 +314,7 @@ check_exceptions_aux (uint32_t n)
   }
   feclearexcept (FE_UNDERFLOW);
   y = cr_function_under_test (x);
-  fegetexceptflag (&inex, FE_UNDERFLOW);
+  inex = fetestexcept (FE_UNDERFLOW);
   if (inex)
   {
     fprintf (stderr, "Error, for x=%a, underflow exception set (y=%a)\n", x, y);

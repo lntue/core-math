@@ -139,9 +139,9 @@ double cr_log2(double x){
   b64u64_u t = {.f = x};
   int ex = t.u>>52, e = ex - 0x3ff;
   if (__builtin_expect(!ex, 0)){ // 0 or subnormal
-    if(!t.u) { // 0
+    if(!t.u) { // +0
 #ifdef CORE_MATH_SUPPORT_ERRNO
-      errno = ERANGE;
+      errno = ERANGE; // pole error
 #endif
       return -1.0 / 0.0;
     }
@@ -150,9 +150,9 @@ double cr_log2(double x){
     t.u <<= k-11;
   }
   if (__builtin_expect(ex >= 0x7ff, 0)){
-    if(!(t.u<<1)) { // 0
+    if(!(t.u<<1)) { // -0
 #ifdef CORE_MATH_SUPPORT_ERRNO
-      errno = ERANGE;
+      errno = ERANGE; // pole error
 #endif
       return -1.0 / 0.0;
     }

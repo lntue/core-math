@@ -52,11 +52,11 @@ static void
 check_spurious_invalid (void)
 {
   float x, y;
-  fexcept_t flag;
+  int flag;
   x = 0x1p31f;
   feclearexcept (FE_INVALID);
   y = cr_lgammaf (x);
-  fegetexceptflag (&flag, FE_INVALID);
+  flag = fetestexcept (FE_INVALID);
   if (flag)
   {
     printf ("Spurious invalid exception for x=%a (y=%a)\n", x, y);
@@ -65,7 +65,7 @@ check_spurious_invalid (void)
   x = 0x1.fffffep+127f;
   feclearexcept (FE_INVALID);
   y = cr_lgammaf (x);
-  fegetexceptflag (&flag, FE_INVALID);
+  flag = fetestexcept (FE_INVALID);
   if (flag)
   {
     printf ("Spurious invalid exception for x=%a (y=%a)\n", x, y);
@@ -74,7 +74,7 @@ check_spurious_invalid (void)
   x = -0x1.000002p+31f;
   feclearexcept (FE_INVALID);
   y = cr_lgammaf (x);
-  fegetexceptflag (&flag, FE_INVALID);
+  flag = fetestexcept (FE_INVALID);
   if (flag)
   {
     printf ("Spurious invalid exception for x=%a (y=%a)\n", x, y);
@@ -83,7 +83,7 @@ check_spurious_invalid (void)
   x = -0x1.fffffep+127f;
   feclearexcept (FE_INVALID);
   y = cr_lgammaf (x);
-  fegetexceptflag (&flag, FE_INVALID);
+  flag = fetestexcept (FE_INVALID);
   if (flag)
   {
     printf ("Spurious invalid exception for x=%a (y=%a)\n", x, y);

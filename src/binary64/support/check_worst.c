@@ -1,6 +1,6 @@
 /* Check correctness of bivariate binary64 function on worst cases.
 
-Copyright (c) 2022 Stéphane Glondu, Paul Zimmermann, Inria.
+Copyright (c) 2022-2025 Stéphane Glondu, Paul Zimmermann, Inria.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -47,6 +47,7 @@ int ref_fesetround (int);
 void ref_init (void);
 
 int rnd1[] = { FE_TONEAREST, FE_TOWARDZERO, FE_UPWARD, FE_DOWNWARD };
+static int rnd2[] = { MPFR_RNDN, MPFR_RNDZ, MPFR_RNDU, MPFR_RNDD };
 
 int rnd;
 
@@ -55,9 +56,6 @@ typedef double double2[2];
 typedef struct {
   double x;
   double y;
-#ifdef CORE_MATH_SUPPORT_ERRNO
-  int errno_ref;
-#endif
 } testcase;
 
 typedef union { double f; uint64_t i; } d64u64;
@@ -110,30 +108,8 @@ readstdin(testcase **result, int *count)
       *result = newresult;
     }
     testcase *item = *result + *count;
-#ifndef CORE_MATH_SUPPORT_ERRNO
     if (sscanf(buf, "%la,%la", &item->x, &item->y) == 2)
       (*count)++;
-#else
-    char err_str[8];
-    int readcnt = sscanf(buf, "%la,%la,%7s", &item->x, &item->y, err_str);
-    if (readcnt == 2) {
-      item->errno_ref = 0;
-      (*count)++;
-    }
-    else if (readcnt == 3) {
-      if (strncmp(err_str, "ERANGE", 7U) == 0) {
-        item->errno_ref = ERANGE;
-      }
-      else if (strncmp(err_str, "EDOM", 5U) == 0) {
-        item->errno_ref = EDOM;
-      }
-      else {
-        item->errno_ref = 0;
-      }
-
-      (*count)++;
-    }
-#endif
     else if (sscanf_snan (buf, &item->x) == 1)
     {
       char *tbuf = buf;
@@ -159,6 +135,17 @@ is_nan (double x)
   uint64_t e = u >> 52;
   return (e == 0x7ff || e == 0xfff) && (u << 12) != 0;
 }
+
+#ifdef CORE_MATH_SUPPORT_ERRNO
+/* define our own is_inf function to avoid depending from math.h */
+static inline int
+is_inf (double x)
+{
+  uint64_t u = asuint64 (x);
+  uint64_t e = u >> 52;
+  return (e == 0x7ff || e == 0xfff) && (u << 12) == 0;
+}
+#endif
 
 static inline int
 is_equal (double x, double y)
@@ -189,6 +176,34 @@ print_binary64 (double x)
   }
 }
 
+/* For |z| = 2^-1022 and underflow after rounding, clear the MPFR
+   underflow exception when the rounded result (with unbounded exponent)
+   equals +/-2^-1022 (might be set due to a bug in MPFR <= 4.2.1). */
+static void
+fix_underflow (double x, double y, double z)
+{
+  if (__builtin_fabs (z) != 0x1p-1022)
+    return;
+  mpfr_t t, u;
+  mpfr_init2 (t, 53);
+  mpfr_init2 (u, 53);
+  fexcept_t flag;
+  fegetexceptflag (&flag, FE_ALL_EXCEPT); // save flags
+  mpfr_set_d (t, x, MPFR_RNDN); // exact
+  mpfr_set_d (u, y, MPFR_RNDN); // exact
+  /* mpfr_set_d might raise the processor underflow/overflow/inexact flags
+     (https://gitlab.inria.fr/mpfr/mpfr/-/issues/2) */
+  fesetexceptflag (&flag, FE_ALL_EXCEPT); // restore flags
+  mpfr_function_under_test (t, t, u, rnd2[rnd]);
+  /* don't call mpfr_subnormalize here since we precisely want an unbounded
+     exponent */
+  mpfr_abs (t, t, MPFR_RNDN); // exact
+  if (mpfr_cmp_ui_2exp (t, 1, -1022) == 0) // |o(f(x,y))| = 2^-1022
+    mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
+  mpfr_clear (t);
+  mpfr_clear (u);
+}
+
 static void
 check (testcase ts)
 {
@@ -198,20 +213,17 @@ check (testcase ts)
   tests ++;
   ref_init();
   ref_fesetround(rnd);
-  mpfr_flags_clear (MPFR_FLAGS_INEXACT);
+  mpfr_flags_clear (MPFR_FLAGS_INEXACT | MPFR_FLAGS_UNDERFLOW | MPFR_FLAGS_OVERFLOW);
   double z1 = ref_function_under_test(ts.x, ts.y);
-#ifdef CORE_MATH_CHECK_INEXACT
+#if defined(CORE_MATH_CHECK_INEXACT) || defined(CORE_MATH_SUPPORT_ERRNO)
   mpfr_flags_t inex1 = mpfr_flags_test (MPFR_FLAGS_INEXACT);
 #endif
   fesetround(rnd1[rnd]);
-  feclearexcept (FE_INEXACT);
+  feclearexcept (FE_INEXACT | FE_UNDERFLOW | FE_OVERFLOW);
 #ifdef CORE_MATH_SUPPORT_ERRNO
   errno = 0;
 #endif
   double z2 = cr_function_under_test(ts.x, ts.y);
-#ifdef CORE_MATH_SUPPORT_ERRNO
-  int cr_errno = errno;
-#endif
   /* Note: the test z1 != z2 would not distinguish +0 and -0. */
   if (is_equal (z1, z2) == 0) {
 #ifndef EXCHANGE_X_Y
@@ -240,9 +252,65 @@ check (testcase ts)
     exit(1);
 #endif
   }
+
+  /* When there is underflow but the result is exact, IEEE 754-2019 says the
+     underflow exception should not be signaled. However MPFR raises the
+     underflow exception in this case: we clear it to mimic IEEE 754-2019. */
+  if (mpfr_flags_test (MPFR_FLAGS_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_INEXACT))
+    mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
+
+  fix_underflow (ts.x, ts.y, z1);
+
+  // Check for spurious/missing underflow exception
+  if (fetestexcept (FE_UNDERFLOW) && !mpfr_flags_test (MPFR_FLAGS_UNDERFLOW))
+  {
+    printf ("Spurious underflow exception for x,y=%la,%la (z=%la)\n",
+            ts.x, ts.y, z1);
+    fflush (stdout);
+#ifdef DO_NOT_ABORT
+    return 1;
+#else
+    exit(1);
+#endif
+  }
+  if (!fetestexcept (FE_UNDERFLOW) && mpfr_flags_test (MPFR_FLAGS_UNDERFLOW))
+  {
+    printf ("Missing underflow exception for x,y=%la,%la (z=%la)\n",
+            ts.x, ts.y, z1);
+    fflush (stdout);
+#ifdef DO_NOT_ABORT
+    return 1;
+#else
+    exit(1);
+#endif
+  }
+
+  /* Check for spurious/missing overflow exception */
+  if (fetestexcept (FE_OVERFLOW) && !mpfr_flags_test (MPFR_FLAGS_OVERFLOW))
+  {
+    printf ("Spurious overflow exception for x,y=%la,%la (z=%la)\n",
+            ts.x, ts.y, z1);
+    fflush (stdout);
+#ifdef DO_NOT_ABORT
+    return 1;
+#else
+    exit(1);
+#endif
+  }
+  if (!fetestexcept (FE_OVERFLOW) && mpfr_flags_test (MPFR_FLAGS_OVERFLOW))
+  {
+    printf ("Missing overflow exception for x,y=%la,%la (z=%la)\n",
+            ts.x, ts.y, z1);
+    fflush (stdout);
+#ifdef DO_NOT_ABORT
+    return 1;
+#else
+    exit(1);
+#endif
+  }
+
 #ifdef CORE_MATH_CHECK_INEXACT
-  fexcept_t inex2;
-  fegetexceptflag (&inex2, FE_INEXACT);
+  int inex2 = fetestexcept (FE_INEXACT);
   if ((inex1 == 0) && (inex2 != 0))
   {
     printf ("Spurious inexact exception for x=%la y=%la (z=%la)\n", ts.x, ts.y, z1);
@@ -262,12 +330,46 @@ check (testcase ts)
 #endif
 
 #ifdef CORE_MATH_SUPPORT_ERRNO
-  // most tests don't check for errno setting, so it's not yet possible to check when errno was set incorrectly (case when errno_ref = 0 & cr_errno != 0)
-  if (ts.errno_ref != 0 && cr_errno != ts.errno_ref) {
-    printf("%s error not set for x=%la y=%la (z=%la)\n", ts.errno_ref == ERANGE ? "Range" : "Domain", ts.x, ts.y, z1);
+  // If x,y are normal numbers and z is NaN, we should have errno = EDOM.
+  if (!is_nan (ts.x) && !is_inf (ts.x) && !is_nan (ts.y) && !is_inf (ts.y))
+  {
+    if (is_nan (z1) && errno != EDOM)
+    {
+      printf ("Missing errno=EDOM for x=%la y=%la (z=%la)\n", ts.x, ts.y, z1);
+      fflush (stdout);
 #ifndef DO_NOT_ABORT
-    exit(1);
+      exit(1);
 #endif
+    }
+    if (!is_nan (z1) && errno == EDOM)
+    {
+      printf ("Spurious errno=EDOM for x=%la y=%la (z=%la)\n", ts.x, ts.y, z1);
+      fflush (stdout);
+#ifndef DO_NOT_ABORT
+      exit(1);
+#endif
+    }
+
+    /* If x,y are normal numbers and z is an exact infinity, or if there is
+       an overflow, we should have errno=ERANGE. */
+    int expected_erange = (is_inf (z1) && inex1 == 0) ||
+      mpfr_flags_test (MPFR_FLAGS_OVERFLOW);
+    if (expected_erange && errno != ERANGE)
+    {
+      printf ("Missing errno=ERANGE for x=%la y=%la (z=%la)\n", ts.x, ts.y, z1);
+      fflush (stdout);
+#ifndef DO_NOT_ABORT
+      exit(1);
+#endif
+    }
+    if (!expected_erange && errno == ERANGE)
+    {
+      printf ("Spurious errno=ERANGE for x=%la y=%la (z=%la)\n", ts.x, ts.y, z1);
+      fflush (stdout);
+#ifndef DO_NOT_ABORT
+      exit(1);
+#endif
+    }
   }
 #endif
 }
@@ -358,14 +460,18 @@ check_signaling_nan (void)
   {
     fprintf (stderr, "Error, foo(sNaN,1.0) should be NaN, got %la=%"PRIx64"\n",
              y, asuint64 (y));
+#ifndef DO_NOT_ABORT
     exit (1);
+#endif
   }
   // check that the signaling bit disappeared
   if (issignaling (y))
   {
     fprintf (stderr, "Error, foo(sNaN,1.0) should be qNaN, got sNaN=%"PRIx64"\n",
              asuint64 (y));
+#ifndef DO_NOT_ABORT
     exit (1);
+#endif
   }
   y = cr_function_under_test (1.0, snan);
   // check that foo(NaN) = NaN
@@ -373,14 +479,18 @@ check_signaling_nan (void)
   {
     fprintf (stderr, "Error, foo(1.0,sNaN) should be NaN, got %la=%"PRIx64"\n",
              y, asuint64 (y));
+#ifndef DO_NOT_ABORT
     exit (1);
+#endif
   }
   // check that the signaling bit disappeared
   if (issignaling (y))
   {
     fprintf (stderr, "Error, foo(1.0,sNaN) should be qNaN, got sNaN=%"PRIx64"\n",
              asuint64 (y));
+#ifndef DO_NOT_ABORT
     exit (1);
+#endif
   }
   // check also sNaN with the sign bit set
   snan = asfloat64 (0xfff0000000000001ull);
@@ -390,14 +500,18 @@ check_signaling_nan (void)
   {
     fprintf (stderr, "Error, foo(sNaN,1.0) should be NaN, got %la=%"PRIx64"\n",
              y, asuint64 (y));
+#ifndef DO_NOT_ABORT
     exit (1);
+#endif
   }
   // check that the signaling bit disappeared
   if (issignaling (y))
   {
     fprintf (stderr, "Error, foo(sNaN,1.0) should be qNaN, got sNaN=%"PRIx64"\n",
              asuint64 (y));
+#ifndef DO_NOT_ABORT
     exit (1);
+#endif
   }
   y = cr_function_under_test (1.0, snan);
   // check that foo(NaN) = NaN
@@ -405,14 +519,18 @@ check_signaling_nan (void)
   {
     fprintf (stderr, "Error, foo(1.0,sNaN) should be NaN, got %la=%"PRIx64"\n",
              y, asuint64 (y));
+#ifndef DO_NOT_ABORT
     exit (1);
+#endif
   }
   // check that the signaling bit disappeared
   if (issignaling (y))
   {
     fprintf (stderr, "Error, foo(1.0,sNaN) should be qNaN, got sNaN=%"PRIx64"\n",
              asuint64 (y));
+#ifndef DO_NOT_ABORT
     exit (1);
+#endif
   }
 }
 
@@ -452,7 +570,7 @@ main (int argc, char *argv[])
         }
     }
 
-  check_signaling_nan ();
-
   doloop();
+
+  check_signaling_nan ();
 }

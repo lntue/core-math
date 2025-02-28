@@ -33,6 +33,7 @@ SOFTWARE.
 
 #include <fenv.h>
 #include <math.h>
+#include <errno.h>
 
 /*
   Type definition
@@ -296,14 +297,18 @@ static inline double dint_tod(dint64_t *a) {
   f64_u e;
 
   if (a->ex > -1023) { // The result is a normal double
-    if (a->ex > 1023)
-      if (a->ex == 1024) {
+    if (a->ex > 1023) {
+      if (a->ex == 1024) { // 2^1024 <= |a| < 2^1025
         r.f = r.f * 0x1p+1;
         e.f = 0x1p+1023;
-      } else {
+      } else { // |a| >= 2^1025
         r.f = 0x1.fffffffffffffp+1023;
         e.f = 0x1.fffffffffffffp+1023;
       }
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      errno = ERANGE;
+#endif
+    }
     else
       e.u = ((a->ex + 1023) & 0x7ff) << 52;
   } else {

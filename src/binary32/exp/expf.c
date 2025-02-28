@@ -1,6 +1,6 @@
 /* Correctly-rounded natural exponential function for binary32 value.
 
-Copyright (c) 2023 Alexei Sibidanov.
+Copyright (c) 2023-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -66,25 +66,27 @@ float cr_expf(float x){
   b64u64_u u = {.f = a + big};
   uint32_t ux = t.u<<1;
   if (__builtin_expect(ux>0x8562e42eu || ux<0x6f93813eu, 0)){
-    if(__builtin_expect(ux<0x6f93813eu, 1)) return 1.0 + z*(1 + z*0.5);
+    // |x| > 0x1.62e42ep+6 or x=nan or |x| < 0x1.93813ep-16
+    if(__builtin_expect(ux<0x6f93813eu, 1)) // |x| < 0x1.93813ep-16
+      return 1.0 + z*(1 + z*0.5);
     if(ux >= 0xffu<<24) { // x is inf or nan
       if(ux > 0xffu<<24) return x + x; // x = nan
       static const float ir[] = {__builtin_inff(), 0.0f};
       return ir[t.u>>31]; // x = +-inf
     }
-    if(t.u>0xc2ce8ec0u){
+    if(t.u>0xc2ce8ec0u){ // x < -0x1.9d1d8p+6
       double y = 0x1p-149 + (z + 0x1.9d1d9fccf477p+6)*0x1.71547652b82edp-150;
       y = __builtin_fmax(y, 0x1p-151);
       float r = y;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-      if(r==0.0f) errno = ERANGE;
+      errno = ERANGE;
 #endif
       return r;
     }
-    if(!(t.u>>31) && t.u>0x42b17217u){
+    if(!(t.u>>31) && t.u>0x42b17217u){ // x > 0x1.62e42ep+6
       float r = 0x1p127f * 0x1p127f;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-      if(r>0x1.fffffep127f) errno = ERANGE;
+      errno = ERANGE; // overflow
 #endif
       return r;
     }
@@ -102,5 +104,10 @@ float cr_expf(float x){
     r = s + w*((c[0] + h*c[1]) + h2*((c[2] + h*c[3]) + h2*(c[4] + h*c[5])));
     ub = r;
   }
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  // for x <= -0x1.5d58ap+6, exp(x) underflows, whatever the rounding mode
+  if (x <= -0x1.5d58ap+6f)
+    errno = ERANGE; // underflow
+#endif
   return ub;
 }

@@ -1,6 +1,6 @@
 /* Correctly-rounded arc-tangent of binary32 value.
 
-Copyright (c) 2022 Alexei Sibidanov.
+Copyright (c) 2022-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -25,6 +25,7 @@ SOFTWARE.
 */
 
 #include <stdint.h>
+#include <errno.h>
 
 // Warning: clang also defines __GNUC__
 #if defined(__GNUC__) && !defined(__clang__)
@@ -46,10 +47,21 @@ float cr_atanf(float x){
     if (ta > 0x7f800000u) return x + x; // nan
     return __builtin_copysign(pi2,(double)x); // inf or |x| >= 0x1.e00a3p+25
   }
-  if (__builtin_expect(e<127-13, 0)){
-    if (__builtin_expect(e<127-25, 0)){
+  if (__builtin_expect(e<127-13, 0)){ // |x| < 2^-13
+    if (__builtin_expect(e<127-25, 0)){ // |x| < 2^-25
       if(!(t.u<<1)) return x;
-      return __builtin_fmaf(-x, __builtin_fabsf(x), x);
+      float res = __builtin_fmaf(-x, __builtin_fabsf(x), x);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      /* The Taylor expansion of atan(x) at x=0 is x - x^3/3 + o(x^3).
+         For |x| > 2^-126 we have no underflow, whatever the rounding mode.
+         For |x| < 2^-126, since |atan(x)| < |x|, we always have underflow.
+         For |x| = 2^-126, we have underflow for rounding towards zero,
+         i.e., when atan(x) rounds to nextbelow(2^-126).
+         In summary, we have underflow whenever |x|<2^-126 or |res|<2^-126. */
+      if (__builtin_fabsf (x) < 0x1p-126f || __builtin_fabsf (res) < 0x1p-126f)
+        errno = ERANGE; // underflow
+#endif
+      return res;
     }
     return __builtin_fmaf(-0x1.5555555555555p-2f*x, x*x, x);
   }

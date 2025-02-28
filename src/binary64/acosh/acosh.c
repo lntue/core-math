@@ -189,11 +189,11 @@ double cr_acosh(double x){
 #endif
     return __builtin_nan("x<1");
   }
-  double x2h = x*x, z = 1/x2h, g = 0;
+  double g;
   int off = 0x3fe;
   b64u64_u t = ix;
   if(ix.u<0x3ff1e83e425aee63ull){
-    z = x-1;
+    double z = x-1;
     double iz = (-0.25)/z, zt = 2*z;
     double sh = __builtin_sqrt(zt), sl = __builtin_fma(sh,sh,-zt)*(sh*iz);
     static const double cl[] = {
@@ -208,19 +208,22 @@ double cr_acosh(double x){
     return as_acosh_one(z, sh, sl);
   } else if(__builtin_expect(ix.u<0x405bf00000000000, 1)){
     off = 0x3ff;
-    double wh = x2h - 1, wl = __builtin_fma(x,x,-x2h);
+    double x2h = x*x, wh = x2h - 1, wl = __builtin_fma(x,x,-x2h);
     double sh = __builtin_sqrt(wh), ish = 0.5/wh, sl = (wl - __builtin_fma(sh,sh,-wh))*(sh*ish);
     double tl, th = fasttwosum(x, sh, &tl); tl += sl;
     t.f = th;
     g = tl/th;
   } else if(ix.u<0x4087100000000000){
     static const double cl[] = {0x1.5c4b6148816e2p-66, -0x1.000000000005cp-2, -0x1.7fffffebf3e6cp-4, -0x1.aab6691f2bae7p-5};
+    double z = 1/(x*x);
     g = cl[0] + z*(cl[1] + z*(cl[2] + z*cl[3]));
   } else if(ix.u<0x40e0100000000000){
     static const double cl[] = {-0x1.7f77c8429c6c6p-67, -0x1.ffffffffff214p-3, -0x1.8000268641bfep-4};
+    double z = 1/(x*x);
     g = cl[0] + z*(cl[1] + z*cl[2]);
   } else if(ix.u<0x41ea000000000000){
     static const double cl[] = {0x1.7a0ed2effdd1p-67, -0x1.000000017d048p-2};
+    double z = 1/(x*x);
     g = cl[0] + z*cl[1];
   } else {
     if(__builtin_expect(ix.u>=0x7ff0000000000000ull, 0)){
@@ -231,6 +234,7 @@ double cr_acosh(double x){
 #endif
       return __builtin_nan("x<1");
     }
+    g = 0;
   }
   int ex = t.u>>52, e = ex - off;
   t.u &= ~(u64)0>>12;

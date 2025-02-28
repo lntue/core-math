@@ -51,30 +51,28 @@ int verbose = 0;
 static void
 check_near_overflow (void)
 {
+#ifdef CORE_MATH_SUPPORT_ERRNO
   float X[] = {0.5f, 1.5f, 2.5f, 3.5f, 4.5f, 0xffffffp-1f, 0xfffffdp-1f};
   for (int i = 0; i < 7; i++) {
     float x = X[i];
     errno = 0;
     float y = cr_tanpif (x);
-#ifdef CORE_MATH_SUPPORT_ERRNO
     if (errno != ERANGE)
     {
       fprintf (stderr, "Expected errno=ERANGE, got %d for x=%a [y=%a]\n", errno, x, y);
       exit (1);
     }
-#endif
     // also test -x
     x = -X[i];
     errno = 0;
     y = cr_tanpif (x);
-#ifdef CORE_MATH_SUPPORT_ERRNO
     if (errno != ERANGE)
     {
       fprintf (stderr, "Expected errno=ERANGE, got %d for x=%a [y=%a]\n", errno, x, y);
       exit (1);
     }
-#endif
   }
+#endif
 }
 
 int

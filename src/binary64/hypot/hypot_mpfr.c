@@ -31,15 +31,22 @@ typedef uint64_t u64;
 typedef union {double f; u64 u;} b64u64_u;
 
 double ref_hypot (double x, double y){
+  /* since MPFR does not distinguish between quiet/signaling NaN,
+     we have to deal with them separately to apply the IEEE rules */
   b64u64_u xi = {.f = x}, yi = {.f = y};
-  if((xi.u<<1)<(0xfffull<<52) && (xi.u<<1)>(0x7ffull<<53)){ // x = sNAN
-    xi.u |= 1ll<<51; // make it quiet NAN
-    return xi.f; // return qNAN
+  if((xi.u<<1)<(0xfffull<<52) && (xi.u<<1)>(0x7ffull<<53)) // x = sNAN
+    return x + y; // will return qNAN
+  if((yi.u<<1)<(0xfffull<<52) && (yi.u<<1)>(0x7ffull<<53)) // y = sNAN
+    return x + y; // will return qNAN
+  if((xi.u<<1) == 0){ // x = +/-0
+    yi.u = (yi.u<<1)>>1;
+    return yi.f;
   }
-  if((yi.u<<1)<(0xfffull<<52) && (yi.u<<1)>(0x7ffull<<53)){ // y = sNAN
-    yi.u |= 1ll<<51; // make it quiet NAN
-    return yi.f; // return qNAN
+  if((yi.u<<1) == 0){ // y = +/-0
+    xi.u = (xi.u<<1)>>1;
+    return xi.f;
   }
+
   mpfr_t xm, ym, zm;
   mpfr_set_emin (-1073);
   mpfr_init2 (xm, 53);

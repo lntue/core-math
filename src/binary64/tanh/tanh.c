@@ -25,6 +25,7 @@ SOFTWARE.
 */
 
 #include <stdint.h>
+#include <errno.h>
 #if defined(__x86_64__)
 #include <x86intrin.h>
 #endif
@@ -237,8 +238,20 @@ double cr_tanh(double x){
     {0x1.64cbba902ca28p-58, 0x1.029ccf99d720ap+0}, {0x1.4383ef231d206p-54, 0x1.02a803f2d170dp+0},
     {0x1.4a47a505b3a46p-54, 0x1.02b338c811703p+0}, {0x1.e47120223468p-54, 0x1.02be6e199c811p+0},
   };
+  double ax = __builtin_fabs(x);
+  b64u64_u ix = {.f = ax};
+  u64 aix = ix.u;
+  /* for |x| >= 0x1.30fc1931f09cap+4, tanh(x) rounds to +1 or -1 to nearest,
+     this avoid a spurious overflow in the computation of v0 below */
+  if (__builtin_expect (aix >=0x40330fc1931f09caull, 0)) {
+    if(aix>0x7ff0000000000000ull) return x + x; // nan
+    double f = __builtin_copysign(1.0, x);
+    if(aix==0x7ff0000000000000ull) return f;
+    double df = __builtin_copysign(0x1p-55, x);
+    return f - df;
+  }
   const double s = -0x1.71547652b82fep+13;
-  double ax = __builtin_fabs(x), v0 = __builtin_fma(ax, s, 0x1.8000004p+25);
+  double v0 = __builtin_fma(ax, s, 0x1.8000004p+25);
   b64u64_u jt = {.f = v0};
 #if defined(__x86_64__)
   __m128d v = _mm_set_sd (v0);
@@ -251,18 +264,24 @@ double cr_tanh(double x){
   v.u &= tt;
   double t = v.f - 0x1.8p25;
 #endif
-  b64u64_u ix = {.f = ax};
-  u64 aix = ix.u;
   int64_t i1 = (jt.u>>27)&0x3f, i0 = (jt.u>>33)&0x3f, ie = (int64_t)(jt.u<<13)>>52;
   const b64u64_u sp = {.u = (1023 + ie)<<52};
   static const double ch[] = {0x1p+1, 0x1p+1, 0x1.55555557e54ffp+0, 0x1.55555553a12f4p-1};
   double t0h = t0[i0][1], t1h = t1[i1][1], th = t0h*t1h, tl;
   if(aix<0x400d76c8b4395810ull){ // |x| ~< 3.683
-    if(__builtin_expect(aix<0x3fd0000000000000ull, 0)){
-      if(__builtin_expect(aix<0x3e10000000000000ull, 0)){
-	if(__builtin_expect(aix<0x3df0000000000000ull, 0)){
+    if(__builtin_expect(aix<0x3fd0000000000000ull, 0)){ // |x| < 0x1p-2
+      if(__builtin_expect(aix<0x3e10000000000000ull, 0)){ // |x| < 0x1p-30
+	if(__builtin_expect(aix<0x3df0000000000000ull, 0)){ // |x| < 0x1p-32
 	  if(__builtin_expect(!aix, 0)) return x;
-	  return __builtin_fma(x,-0x1p-55,x);
+          /* We have underflow when 0 < |x| < 2^-1022 or when |x| = 2^-1022
+             and rounding towards zero. */
+          double res = __builtin_fma (x, -0x1p-55, x);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+          if (__builtin_fabs (x) < 0x1p-1022 ||
+              __builtin_fabs (res) < 0x1p-1022)
+            errno = ERANGE; // underflow
+#endif
+          return res;
 	}
 	double x3 = x*x*x;
 	return x - x3/3;
@@ -305,13 +324,6 @@ double cr_tanh(double x){
     double lb = rh + (rl - e), ub = rh + (rl + e);
     if(lb == ub) return lb;
   } else {
-    if(__builtin_expect(aix>=0x40330fc1931f09caull, 0)){
-      if(aix>0x7ff0000000000000ull) return x + x; // nan
-      double f = __builtin_copysign(1.0, x);
-      if(aix==0x7ff0000000000000ull) return f;
-      double df = __builtin_copysign(0x1p-55, x);
-      return f - df;
-    }
     static const double l2 = -0x1.62e42fefa39efp-14;
     double dx = __builtin_fma(l2, t, -ax), dx2 = dx*dx;
     double p = dx*((ch[0] + dx*ch[1]) + dx2*(ch[2] + dx*ch[3]));

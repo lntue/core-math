@@ -1,6 +1,6 @@
 /* Correctly-rounded arctangent function of two binary32 values.
 
-Copyright (c) 2022 Alexei Sibidanov and Paul Zimmermann.
+Copyright (c) 2022-2025 Alexei Sibidanov and Paul Zimmermann.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -82,7 +82,12 @@ cr_atan2f_tiny (float y, float x)
     else
       t.u -= 1;
   }
-  return t.f;
+  float res = t.f;
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  if (__builtin_fabsf (res) < 0x1p-126f)
+    errno = ERANGE; // underflow
+#endif
+  return res;
 }
 
 float cr_atan2f(float y, float x){
@@ -134,7 +139,7 @@ float cr_atan2f(float y, float x){
     if(!(ux>>31)) return 0.0f*sgn[uy>>31];
   }
   uint32_t gt = ay>ax, i = (uy>>31)*4 + (ux>>31)*2 + gt;
-  
+
   double zx = x, zy = y;
   double z = (m[gt]*zx + m[1-gt]*zy)/(m[gt]*zy + m[1-gt]*zx);
   // z = x/y if |y| > |x|, and z = y/x otherwise
@@ -216,8 +221,8 @@ float cr_atan2f(float y, float x){
   }
   float rf = r;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-  // if rf = 0, and x != 0, set errno=ERANGE
-  if (__builtin_expect (rf == 0 && x != 0, 0))
+  // if rf underflows, and x != 0, set errno=ERANGE
+  if (__builtin_expect (__builtin_fabsf (rf) < 0x1p-126f && x != 0, 0))
     errno = ERANGE;
 #endif
   return rf;

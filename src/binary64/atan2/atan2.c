@@ -28,6 +28,7 @@ SOFTWARE.
    who designed the code to generate a rational approximation of atan(z)
    over (0,1). See comments before P[] and Q[] below. */
 
+#include <fenv.h>
 #include <stdio.h> // needed in case of correct rounding failure
 #include <stdint.h>
 
@@ -196,13 +197,28 @@ static const tint_t Q[30] = {
 static double __attribute__((noinline))
 atan2_accurate (double y, double x)
 {
+  fexcept_t flag;
+  fegetexceptflag (&flag, FE_UNDERFLOW | FE_OVERFLOW); // save flags
+  int underflow;
+  double res;
   /* First check when t=y/x is small and exact and x > 0, since for
      |t| <= 0x1.d12ed0af1a27fp-27, atan(t) rounds to t (to nearest). */
+  feclearexcept (FE_UNDERFLOW); // clear underflow flag
   double t = y / x;
-  /* If t underflows, then atan(y/x) rounds to t for x > 0, to pi for y > 0 and x < 0,
-     and to -pi for x, y < 0. */
-  if (t == 0)
-    return (x > 0) ? t : (y > 0) ? PI_H + PI_L : -PI_H - PI_L;
+
+  /* If t = y/x did underflow for x > 0, then atan(y/x) will underflow
+     too, since the Taylor expansion of atan(z) is z - z^3/3 + o(z^3) */
+  underflow = x > 0 && fetestexcept (FE_UNDERFLOW);
+
+  /* If t is exact and underflows, then atan(y/x) rounds to t for x > 0,
+     to pi for y > 0 and x < 0, and to -pi for x, y < 0. */
+  if (t == 0) {
+    if (x > 0)
+      return t;
+    res = (y > 0) ? PI_H + PI_L : -PI_H - PI_L;
+    goto end;
+  }
+  // FIXME: the computation of corr might raise a spurious underflow
   double corr = __builtin_fma (t, x, -y);
   if (corr == 0 && x > 0) // t is exact
     if (__builtin_fabs (t) <= 0x1.d12ed0af1a27fp-27)
@@ -239,7 +255,8 @@ atan2_accurate (double y, double x)
       z->l -= 2;
       z->m -= (z->l < 2);
       z->h -= (z->m < 1);
-      return tint_tod (z, 1, y, x);
+      res = tint_tod (z, 1, y, x);
+      goto end;
     }
 
   // below when we write y/x it should be read x/y when |x/y| < 1
@@ -335,7 +352,12 @@ atan2_accurate (double y, double x)
     }
     err = 266;
   }
-  return tint_tod (z, err, y, x);
+  res = tint_tod (z, err, y, x);
+ end:
+  if (!underflow)
+    fesetexceptflag (&flag, FE_UNDERFLOW); // restore underflow flag
+  fesetexceptflag (&flag, FE_OVERFLOW); // restore overflow flag
+  return res;
 }
 
 typedef uint64_t u64;
@@ -358,7 +380,8 @@ static double __attribute__((noinline)) as_atan2_special(double y0, double x0){
 
   if (__builtin_expect (aiy >= 0x7ffull<<53 || aix >= 0x7ffull<<53, 0)){ // NaN or Inf
     if (aiy > 0x7ffull<<53 || aix > 0x7ffull<<53)
-      return y0 + x0; // if y or x is sNaN, returns qNaN and raises invalid
+      // return y0 + x0; // if y or x is sNaN, returns qNaN and raises invalid
+      return y0 + x0;
     // Now neither y nor x is NaN, but at least one is +Inf or -Inf
     if (aiy == 0x7ffull<<53 && aix == 0x7ffull<<53){ // both y and x are +/-Inf
       static const double finf[][2] = {{0x1p-55, 0x1.921fb54442d18p-1}, {0x1p-54, 0x1.2d97c7f3321d2p+1}};
@@ -491,9 +514,17 @@ double cr_atan2 (double y0, double x0){
   double rl = (fl + dz) + z;
   double lb = rh + (rl - eps), ub = rh + (rl + eps);
   if(lb!=ub){
-    double dh = y*t0, dl = __builtin_fma(y,t0,-dh), e;
+    double dh = y*t0, dl = __builtin_fma(y,t0,-dh), e, rdh;
     dh = fasttwosum(x, dh, &e);
-    double rdh = 1/dh;
+    // avoid spurious underflow in 1/dh
+    if (__builtin_expect (__builtin_fabs (dh) <= 0x1p1022, 1))
+      rdh = 1/dh;
+    else {
+      fexcept_t flag;
+      fegetexceptflag (&flag, FE_UNDERFLOW);
+      rdh = 1/dh;
+      fesetexceptflag (&flag, FE_UNDERFLOW);
+    }
     dl += e;
     double nh = x*t0, nl = __builtin_fma(x,t0,-nh);
     double dt = y-nh, y1 = dt+nh;

@@ -26,6 +26,11 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <errno.h>
+#if defined(__x86_64__)
+#include <x86intrin.h>
+#else
+#include <fenv.h>
+#endif
 
 // Warning: clang also defines __GNUC__
 #if defined(__GNUC__) && !defined(__clang__)
@@ -268,6 +273,22 @@ static __attribute__((noinline)) double as_tgamma_database(double x, double f){
     m = (a + b)/2;
   }
   return f;
+}
+
+// raise the underflow exception
+static void
+raise_underflow (void)
+{
+#ifdef __x86_64__
+  _mm_setcsr (_mm_getcsr () | _MM_EXCEPT_UNDERFLOW);
+#else
+  feraiseexcept (FE_UNDERFLOW);
+#endif
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  /* The C standard says that if the function underflows,
+     errno is set to ERANGE. */
+  errno = ERANGE;
+#endif
 }
 
 static __attribute__((noinline)) double as_tgamma_accurate(double x){
@@ -541,7 +562,7 @@ static __attribute__((noinline)) double as_tgamma_accurate(double x){
 	xpl += l;
 	xph = fasttwosum(xph,xpl, &xpl);
 	wh = muldd3(xph,xpl,wh,wl,&wl);
-	if(__builtin_fabs(wh)>0x1p918){
+	if(__builtin_fabs(wh)>0x1p518){
 	  wh *= 0x1p-500;
 	  wl *= 0x1p-500;
 	  eoff -= 500;
@@ -579,17 +600,18 @@ static __attribute__((noinline)) double as_tgamma_accurate(double x){
 
   double eps = 0x1.ep-103*fh, ub = fh + (fl + eps), lb = fh + (fl - eps);
   b64u64_u res = {.f = fh + fl};
-  long re = (res.u >> 52)&0x7ff;
-  if(re + eoff <= 0){
-    res.u -= (long)(eoff+re-1)<<52;
+  int64_t re = (res.u >> 52)&0x7ff;
+  if(re + eoff <= 0){ // subnormal case
+    res.u -= (int64_t)(eoff+re-1)<<52;
     res.u &= 0xffful<<52;
     double l;
     fh = fasttwosum(res.f, fh, &l);
     fl += l;
     res.f = fh + fl;
     res.u &= ~(0x7fful<<52);
+    raise_underflow ();
   } else {
-    res.u += (long)eoff<<52;
+    res.u += (int64_t)eoff<<52;
   }
   if(ub!=lb) return as_tgamma_database(x, res.f);
   return res.f;
@@ -615,12 +637,28 @@ double cr_tgamma(double x){
   double z = x;
   if(__builtin_expect(__builtin_fabs(x)<0.25, 0)){ /* |x| < 0x1p-2 */
     if(ax<0x71e0000000000000ul){ // |x| < 0x1p-112
-      double r = 1/x;
-      /* gamma(x) ~ 1/x - euler_gamma near x=0, thus we should raise the
-         inexact exception even for x = 2^k */
-      if (__builtin_expect(__builtin_fma (r, x, -1.0) == 0, 0)) r -= 0.5;
+      double r;
+      // deal separately with x=2^-1024 to avoid a spurious overflow in 1/x
+      if (x == 0x1p-1024) {
+        r = 0x1.fffffffffffffp+1023 + 0x1p+970;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-      if(__builtin_fabs(r)>0x1.fffffffffffffp+1023) errno = ERANGE;
+        if (r > 0x1.fffffffffffffp+1023)
+          errno = ERANGE;
+#endif
+        return r;
+      }
+      r = 1/x;
+      // the following raises the inexact flag in case x=2^k
+      if (__builtin_expect(__builtin_fma (r, x, -1.0) == 0, 0)) r -= 0.5;
+      /* gamma(x) ~ 1/x - euler_gamma near x=0, thus we should raise the
+         inexact exception even for x = 2^k.
+         More precisely gamma(x) overflows:
+         * for |x| < 2^-1024 and all rounding modes
+         * for x=-2^-1024 and all rounding modes
+         (the case x=2^-1024 was treated separately above) */
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      if (__builtin_fabs (x) < 0x1p-1024 || x == -0x1p-1024)
+        errno = ERANGE;
 #endif
       return r;
     }
@@ -711,12 +749,12 @@ double cr_tgamma(double x){
       double ub = rh + (rl + eps), lb = rh + (rl - eps);
       if(ub != lb) return as_tgamma_accurate(x);
       th.f = ub;
-      th.u -= (long)e<<52;
+      th.u -= (int64_t)e<<52;
     } else {
       th.f = rh;
       int re = (th.u>>52)&0x7ff;
-      if(re-e<=0){
-	th.u += (long)(e-re+1)<<52;
+      if(re-e<=0){ // subnormal case
+	th.u += (int64_t)(e-re+1)<<52; // 1 <= e-re+1 <= 53
 	th.u &= 0xffful<<52;
 	double l;
 	rh = fasttwosum(th.f, rh, &l);
@@ -724,12 +762,13 @@ double cr_tgamma(double x){
 	double ub = rh + (rl + eps), lb = rh + (rl - eps);
 	if(ub != lb) return as_tgamma_accurate(x);
 	th.f = ub;
-	th.u &= ~(0x7fful<<52);
+	th.u &= ~(0x7fful<<52); // make subnormal
+        raise_underflow ();
       } else {
 	double ub = rh + (rl + eps), lb = rh + (rl - eps);
 	if(ub != lb) return as_tgamma_accurate(x);
 	th.f = ub;
-	th.u -= (long)e<<52;
+	th.u -= (int64_t)e<<52;
       }
     }
     return th.f;
@@ -742,7 +781,7 @@ double cr_tgamma(double x){
     double ub = lh + (ll + eps), lb = lh + (ll - eps);
     if(ub != lb) return as_tgamma_accurate(x);
     b64u64_u th = {.f = ub};
-    th.u += (long)e<<52;    
+    th.u += (int64_t)e<<52;    
     return th.f;
   }
 

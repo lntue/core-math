@@ -114,8 +114,7 @@ check_aux (long double x, long double y)
   fesetround(rnd1[rnd]);
   feclearexcept (FE_INEXACT);
   z = cr_powl (x, y);
-  fexcept_t inex2;
-  fegetexceptflag (&inex2, FE_INEXACT);
+  int inex2 = fetestexcept (FE_INEXACT);
   mpfr_clear (X);
   mpfr_clear (Y);
   mpfr_clear (Z);

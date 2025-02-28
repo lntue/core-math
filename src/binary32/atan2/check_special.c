@@ -84,8 +84,9 @@ check (float y, float x)
 #endif
   feclearexcept (FE_INEXACT);
   z = cr_atan2f (y, x);
-  fexcept_t inex2;
-  fegetexceptflag (&inex2, FE_INEXACT);
+#ifdef CORE_MATH_CHECK_INEXACT
+  int inex2 = fetestexcept (FE_INEXACT);
+#endif
   if ((isnan (t) && !isnan(z)) || (!isnan (t) && isnan(z)) ||
       (!isnan (t) && !isnan(z) && z != t))
   {

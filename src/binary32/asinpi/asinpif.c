@@ -43,21 +43,22 @@ float cr_asinpif(float x){
   double az = ax, z = x;
   b32u32_u t = {.f = x};
   int32_t e = (t.u>>23)&0xff;
-  if(__builtin_expect(e>=127, 0)){
-    if(ax == 1.0f) return __builtin_copysignf(0.5f, x);
-    if(e==0xff && (t.u<<9)) return x+x; // nan
+  if(__builtin_expect(e>=127, 0)){ // |x| >= 1 or nan
+    if(ax == 1.0f) return __builtin_copysignf(0.5f, x); // |x| = 1
+    if(e==0xff && (t.u<<9)) return x+x; // x = nan
 #ifdef CORE_MATH_SUPPORT_ERRNO
     errno = EDOM;
 #endif
     feraiseexcept(FE_INVALID);
-    return __builtin_nanf("1");
+    return __builtin_nanf("1"); // |x| > 1
   }
   int32_t s = 146 - e, i = 0;
+  // s<32 corresponds to |x| >= 2^-12
   if(__builtin_expect(s<32, 1)) i = ((t.u&(~0u>>9))|1<<23)>>s;
   static const double ch[][8] = {
     {0x1.45f306dc9c882p-2, 0x1.b2995e7b7dc2fp-5, 0x1.8723a1cf50c7ep-6, 0x1.d1a4591d16a29p-7,
     0x1.3ce3aa68ddaeep-7, 0x1.d3182ab0cc1bfp-8, 0x1.62b379a8b88e3p-8, 0x1.6811411fcfec2p-8},
-    {0x1.ffffffffd3cdap-2, -0x1.17cc1b3355fdcp-4, 0x1.d067a1e8d5a99p-6, -0x1.08e16fb09314ap-6,
+    {0x1.ffffffffd3cdap-2, -0x1.17cc1b3355fddp-4, 0x1.d067a1e8d5a99p-6, -0x1.08e16fb09314ap-6,
     0x1.5eed43d42dcb2p-7, -0x1.f58baca7acc71p-8, 0x1.5dab64e2dcf15p-8, -0x1.59270e30797acp-9},
     {0x1.fffffff7c4617p-2, -0x1.17cc149ded3a2p-4, 0x1.d0654d4cb2c1ap-6, -0x1.08c3ba713d33ap-6,
     0x1.5d2053481079cp-7, -0x1.e485ebc545e7ep-8, 0x1.303baca167dddp-8, -0x1.dee8d16d06b38p-10},
@@ -89,7 +90,7 @@ float cr_asinpif(float x){
     0x1.93ab06911033cp-8, -0x1.1ee5560967fd5p-9, 0x1.07d31060838bfp-11, -0x1.c96f33a283115p-15}};
   const double *c = ch[i];
   double z2 = z*z, z4 = z2*z2;
-  if(__builtin_expect(!i, 0)){
+  if(__builtin_expect(!i, 0)){ // |x| < 2^-4
     double c0 = c[0] + z2*c[1];
     double c2 = c[2] + z2*c[3];
     double c4 = c[4] + z2*c[5];
@@ -98,13 +99,21 @@ float cr_asinpif(float x){
     c4 += c6*z4;
     c0 += c4*(z4*z4);
 #ifdef CORE_MATH_SUPPORT_ERRNO
-    if (__builtin_expect(ax <= 0x1.921fb4p-126f && ax != 0.0f, 0))
+    /* For rounding towards zero, the largest positive number for which there
+       is underflow is 0x1.921fb4p-125.
+       For rounding to nearest, it is 0x1.921fb4p-125 too (although the result
+       is 0x1p-126).
+       For rounding upwards, it is 0x1.921fb2p-125. */
+#define THRESHOLD 0x1.fffffe632357dp-127
+    if (ax != 0.0f && (__builtin_fabsf (x) <= 0x1.921fb2p-125f ||
+                       (__builtin_fabsf (x) == 0x1.921fb4p-125f &&
+                        __builtin_fabs (z * ch[0][0]) <= THRESHOLD)))
       errno = ERANGE; // underflow
 #endif
     return z*c0;
-  } else {
+  } else { // |x| >= 2^-4
     double f = __builtin_sqrt(1-az);
-    double c0 = __builtin_fma(az, c[1], c[0]);
+    double c0 = c[0] + az*c[1];
     double c2 = c[2] + az*c[3];
     double c4 = c[4] + az*c[5];
     double c6 = c[6] + az*c[7];

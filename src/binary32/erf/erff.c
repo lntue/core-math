@@ -1,6 +1,6 @@
 /* Correctly-rounded error function for binary32 value.
 
-Copyright (c) 2022 Alexei Sibidanov.
+Copyright (c) 2022-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -25,6 +25,7 @@ SOFTWARE.
 */
 
 #include <stdint.h>
+#include <errno.h>
 
 // Warning: clang also defines __GNUC__
 #if defined(__GNUC__) && !defined(__clang__)
@@ -101,9 +102,8 @@ float cr_erff(float x){
   b32u32_u t = {.f = ax};
   uint32_t ux = t.u;
   double s = x, z = ax;
-  /* 0x407ad444 corresponds to x = 0x1.f5a888p+1 = 3.91921..., which is the
-     largest float such that erf(x) does not round to 1 (to nearest) */
-  if (__builtin_expect(ux > 0x407ad444u, 0)) {
+  // for x > 0x1.f5a888p+1, erf(x) rounds to 1 to nearest
+  if (__builtin_expect(ux > 0x407ad444u, 0)) { // |x| > 0x1.f5a888p+1
     float os = __builtin_copysignf(1.0f, x);
     if (ux> (0xffu<<23)) return x + x; // nan
     if (ux==(0xffu<<23)) return os; // +-inf
@@ -111,8 +111,7 @@ float cr_erff(float x){
   }
   double v = __builtin_floor(16.0 * z);
   uint32_t i = 16.0f * ax;
-  /* 0x3ee00000 corresponds to x = 0.4375, for smaller x we have i < 7 */
-  if (__builtin_expect(ux < 0x3ee00000u, 0)) {
+  if (__builtin_expect(ux < 0x3ee00000u, 0)) { // |x| < 0x1.cp-2
     static const double c[] =
       {0x1.20dd750429b6dp+0, -0x1.812746b0375fbp-2, 0x1.ce2f219fd6f45p-4, -0x1.b82ce2cbf0838p-6,
        0x1.565bb655adb85p-8, -0x1.c025bfc879c94p-11, 0x1.f81718f61309cp-14, -0x1.cc67bd88f5867p-17};
@@ -124,6 +123,17 @@ float cr_erff(float x){
     c0 += z4*c2;
     c4 += z4*c6;
     c0 += z8*c4;
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    /* For rounding to nearest or towards zero, erf(x) underflows for
+       |x| <= 0x1.c5bf88p-127. For rounding away from zero,
+       it underflows for |x| <= 0x1.c5bf84p-127.
+       For rounding to nearest, for x = 0x1.c5bf88p-127, erf(x) rounds to
+       0x1p-126, thus the test |res| < 0x1p-126 would not suffice. */
+    if (x != 0 && (__builtin_fabsf (x) <= 0x1.c5bf84p-127f ||
+                   (__builtin_fabsf (x) == 0x1.c5bf88p-127f &&
+                    __builtin_fabsf (x * 5.0f) <= 0x1.1b97b4p-124f)))
+      errno = ERANGE; // underflow
+#endif
     return s*c0;
   }
   z = (z - 0.03125) - 0.0625*v;

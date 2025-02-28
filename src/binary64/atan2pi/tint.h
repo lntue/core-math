@@ -102,7 +102,6 @@ mul_tint (tint_t *r, const tint_t *a, const tint_t *b)
   uint64_t h, l, cm;
   r->h = rh >> 64;
   r->m = rh; // cast to low 64 bits
-  r->l = 0;
   // accumulate rm1
   r->l = rm1; // cast to low 64 bits
   h = rm1 >> 64;

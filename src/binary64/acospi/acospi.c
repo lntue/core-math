@@ -33,6 +33,7 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <math.h>
+#include <errno.h>
 
 // Warning: clang also defines __GNUC__
 #if defined(__GNUC__) && !defined(__clang__)
@@ -938,7 +939,14 @@ cr_acospi (double x)
   double absx = u.x;
   k = u.i[HIGH];
   if (k < 0x3fe80000) { /* |x| < 0.75 */
-    if (__builtin_expect (k == 0 && u.i[LOW] == 0, 0)) return 0.5; // x = 0
+    // avoid spurious underflow:
+    // for |x| <= 0x1.921fb54442d18p-54, acospi(x) rounds to 0.5 to nearest
+    if (__builtin_expect (k < 0x3c9921fb, 0))
+    {
+      if (__builtin_expect (k == 0 && u.i[LOW] == 0, 0)) return 0.5; // x = 0
+      // acospi(x) ~ 1/2 - x/pi
+      return 0.5 - __builtin_copysign (0x1p-55, x);
+    }
     /* approximate acos(x) by p(x-xmid), where [0,0.75) is split
        into 192 sub-intervals */
     v.x = 1.0 + absx; /* 1 <= v.x < 2 */
@@ -1077,12 +1085,16 @@ cr_acospi (double x)
   else
     if (k==0x3ff00000 && u.i[LOW]==0) return (x>0) ? 0 : 1; // acospi_specific
   else
-    if (k>0x7ff00000 || (k == 0x7ff00000 && u.i[LOW] != 0)) return x + x; // nan
-  else {
+    if (k > 0x7ff00000 || (k == 0x7ff00000 && u.i[LOW] != 0))
+      return x + x; // case x=nan
+  else { // case x=Inf or x > 1
     u.i[HIGH]=0x7ff00000;
     v.i[HIGH]=0x7ff00000;
     u.i[LOW]=0;
     v.i[LOW]=0;
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    errno = EDOM;
+#endif
     return u.x/v.x;
   }
 }

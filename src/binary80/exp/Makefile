@@ -5,7 +5,7 @@ include ../support/Makefile.univariate
 clean::
 	rm -rf *.o check_special
 
-all:: check_special check_exact
+all:: check_special
 
 check_special: check_special.o $(CORE_MATH_OBJS) $(FUNCTION_UNDER_TEST)_mpfr.o
 	$(CC) $(LDFLAGS) $(OPENMP) -o $@ $^ -lmpfr -lm

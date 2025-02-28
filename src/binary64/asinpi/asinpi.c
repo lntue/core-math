@@ -697,7 +697,6 @@ double cr_asinpi(double x){
        3 and more), thus by 24.08.
      */
 
-    t.u = v;
     fi.bl = 0xd313198a2e037073;
     fi.bh = 0x3243f6a8885a308;
     /* fi.a/2^127 approximates pi/2/64 */

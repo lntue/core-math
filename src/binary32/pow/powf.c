@@ -1,6 +1,6 @@
 /* Correctly-rounded power function for binary32 values.
 
-Copyright (c) 2022-2024 Alexei Sibidanov and Paul Zimmermann
+Copyright (c) 2022-2025 Alexei Sibidanov and Paul Zimmermann
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -25,6 +25,7 @@ SOFTWARE.
 */
 
 #include <stdint.h>
+#include <errno.h>
 #ifdef __x86_64__
 #include <x86intrin.h>
 #define FLAG_T uint32_t
@@ -116,6 +117,25 @@ inline static unsigned int _mm_getcsr()
 }
 #endif  // defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
 
+static inline int issignalingf(float x) {
+  b32u32_u u = {.f = x};
+  /* To keep the following comparison simple, toggle the quiet/signaling bit,
+   so that it is set for sNaNs.  This is inverse to IEEE 754-2008 (as well as
+   common practice for IEEE 754-1985).  */
+  u.u ^= 0x00400000;
+  /* We have to compare for greater (instead of greater or equal), because x's
+     significand being all-zero designates infinity not NaN.  */
+  return (u.u & 0x7fffffff) > 0x7fc00000;
+}
+
+#ifdef CORE_MATH_SUPPORT_ERRNO
+// assume x is not NaN
+static inline int is_inf (float x) {
+  b32u32_u u = {.f = x};
+  return (u.u << 1) >= 0xff000000ull;
+}
+#endif
+
 static inline double muldd(double xh, double xl, double ch, double cl, double *l){
   double ahlh = ch*xl, alhh = cl*xh, ahhh = ch*xh, ahhl = __builtin_fma(ch, xh, -ahhh);
   ahhl += alhh + ahlh;
@@ -199,12 +219,14 @@ is_exact (float x, float y)
      (b) y integer, 0 <= y <= 15
      (c) y<0: x=1 or (x=2^e and |y|=n*2^-k with 2^k dividing e)
      (d) y>0: y=n*2^f with -4 <= f <= -1 and 1 <= n <= 15
-     In cases (b)-(d), the low 20 bits of the encoding of y are zero,
-     thus we use that for an early exit test. */
+     In cases (b)-(d), the low 16 bits of the encoding of y are zero,
+     thus we use that for an early exit test.
+     (For case (c), x=0x1p+1 and y=-0x1.2ap+7, only 16 low bits of the
+     encoding of y are zero.) */
 
   b32u32_u v = {.f = x}, w = {.f = y};
   if (__builtin_expect ((v.u << 1) != 0x7f000000 && // |x| <> 1
-                        (w.u << 12) != 0, 1))
+                        (w.u << (32 - 16)) != 0, 1))
     return 0;
 
   if (__builtin_expect ((v.u << 1) == 0x7f000000, 0)) // |x| = 1
@@ -367,11 +389,15 @@ float cr_powf(float x0, float y0){
     if(tx.u>>63){ // x=-1
       if((ty.u<<1) > (uint64_t)0x7ff<<53) return y0 + y0; // y=nan
       if(isint(y0)) return (isodd(y0)) ? x0 : -x0;
-      return __builtin_nanf(""); // (-1)^y for non-integer y
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      errno = EDOM;
+#endif
+      return (x - x) / (x - x);  // NaN /  (-1)^y for non-integer y, should raise 'Invalid operation' exception.
     }
-    return x0; // x=1
+    return issignalingf (y0) ? x0 + y0 : x; // 1^y = 1 except for y = sNaN
   }
-  if(__builtin_expect (ty.u<<1 == 0, 0)) return 1.0f;              // y=0
+  if(__builtin_expect (ty.u<<1 == 0, 0))
+    return issignalingf (x0) ? x0 + y0 : 1.0f; // x^0 = 1 except for x = sNaN
   if(__builtin_expect ((ty.u<<1) >= (uint64_t)0x7ff<<53, 0)){ // y=Inf/NaN
     if((tx.u<<1) == (uint64_t)0x3ff<<53) // |x|=1
       return (x0 == 1.0f || (ty.u<<1) == (uint64_t)0x7ff<<53)
@@ -384,7 +410,7 @@ float cr_powf(float x0, float y0){
 	return __builtin_inf();
       }
     }
-    return y0;
+    return x0 + y0;
   }
   if(__builtin_expect (tx.u >= (uint64_t)0x7ff<<52, 0)){ // x is Inf, NaN or less than 0
     if((tx.u<<1) == (uint64_t)0x7ff<<53){ // x is +Inf or -Inf
@@ -393,14 +419,23 @@ float cr_powf(float x0, float y0){
     }
     if((tx.u<<1) > (uint64_t)0x7ff<<53) return x0 + x0; // x is NaN
     if(__builtin_expect(tx.u > (uint64_t)0x7ff<<52, 0)) // x <= 0
-      if(!isint(y0) && x != 0) return __builtin_nanf("");
+      if(!isint(y0) && x != 0) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+        errno = EDOM;
+#endif
+	return (x - x) / (x - x);  // NaN, should raise 'Invalid operation' exception.
+      }
   }
   if(__builtin_expect (!(tx.u<<1), 0)){ // x=+0 or -0
     if(ty.u>>63){ // y < 0
-      if(isodd(y0))
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      errno = ERANGE;
+#endif
+      if(isodd(y0)) {
 	return 1.0f/__builtin_copysignf(0.0f,x0);
-      else
+      }  else {
 	return 1.0f/0.0f;
+      }
     } else { // y > 0
       if(isodd(y0))
 	return __builtin_copysignf(1.0f,x0)*0.0f;
@@ -430,12 +465,19 @@ float cr_powf(float x0, float y0){
   double zt = (e - lix[j][0])*y;
   z = l*y + zt;
   if(__builtin_expect(z>2048, 0)){
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    errno = ERANGE; // overflow
+#endif
     if(isodd(y0))
       return __builtin_copysignf(0x1p127f, x0)*0x1p127f;
-    else
+    else {
       return 0x1p127f*0x1p127f;
+    }
   }
   if(__builtin_expect(z<-2400, 0)){
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    errno = ERANGE; // underflow
+#endif
     if(isodd(y0))
       return __builtin_copysignf(0x1p-126f, x0)*0x1p-126f;
     else
@@ -470,6 +512,15 @@ float cr_powf(float x0, float y0){
   uint64_t kk = ty.u<<(11+et);
   if(!(kk<<1)&&kk) rr.f = __builtin_copysign(rr.f,x);
   float res = rr.f;
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  /* It is not enough to check if res is infinite, since for rounding towards
+     zero, we have overflow for x^y >= 2^128, but res = MAX_FLT.
+     It is also not enough to check if rr >= 2^128, since for rounding upwards,
+     we have overflow for MAX_DBL < rr < 2^128. */
+  if (is_inf (res) || __builtin_fabs (rr.f) >= 0x1p128 ||
+      __builtin_fabs (rr.f) < 0x1p-126)
+    errno = ERANGE; // overflow or underflow
+#endif
   return res;
 }
 
@@ -583,5 +634,9 @@ static float as_powf_accurate2(float x0, float y0, int is_exact, FLAG_T flag){
   float res = eh;
   if (is_exact)
     set_flag (flag);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  if (__builtin_fabsf (res) < 0x1p-126f && !is_exact)
+    errno = ERANGE;
+#endif
   return res;
 }

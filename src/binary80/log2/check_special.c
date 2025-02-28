@@ -109,8 +109,7 @@ check (long double x)
   fesetround (rnd1[rnd]);
   feclearexcept (FE_INEXACT);
   long double y2 = cr_log2l (x);
-  fexcept_t inex2;
-  fegetexceptflag (&inex2, FE_INEXACT);
+  int inex2 = fetestexcept (FE_INEXACT);
   if (!is_equal (y1, y2))
   {
     printf ("FAIL x=%La ref=%La z=%La\n", x, y1, y2);

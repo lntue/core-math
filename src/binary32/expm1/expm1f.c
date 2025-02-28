@@ -1,6 +1,6 @@
 /* Correctly-rounded natural exponent function biased by 1 for binary32 value.
 
-Copyright (c) 2022-2023 Alexei Sibidanov.
+Copyright (c) 2022-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -94,7 +94,13 @@ float cr_expm1f(float x){
   if(__builtin_expect(ax<0x7c400000u,1)){ // |x| < 0.15625
     if(__builtin_expect(ax<0x676a09e8u, 0)){ // |x| < 0x1.6a09e8p-24
       if(__builtin_expect(ax==0x0u, 0)) return x; // x = +-0
-      return __builtin_fmaf(__builtin_fabsf(x),0x1p-25f,x);
+      float res = __builtin_fmaf(__builtin_fabsf(x),0x1p-25f,x);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      // expm1(x) underflows for |x| < 2^-126, and for x=-0x1p-126 and RNDZ
+      if (__builtin_fabsf (x) < 0x1p-126f || __builtin_fabsf (res) < 0x1p-126f)
+        errno = ERANGE; // underflow
+#endif
+      return res;
     }
     static const double b[] =
       {0x1.fffffffffffc2p-2, 0x1.55555555555fep-3, 0x1.555555559767fp-5, 0x1.1111111098dc1p-7,

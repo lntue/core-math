@@ -1,6 +1,6 @@
 /* Correctly-rounded base-10 exponent function biased by 1 for binary32 value.
 
-Copyright (c) 2022-2024 Alexei Sibidanov, Paul Zimmermann.
+Copyright (c) 2022-2025 Alexei Sibidanov, Paul Zimmermann.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -58,7 +58,7 @@ float cr_exp10m1f(float x){
   } else if(__builtin_expect(ax>0x421a209au, 0)){  // x > 38.5318
     if(ax>=(0xffu<<23)) return x + x; // +Inf or NaN
 #ifdef CORE_MATH_SUPPORT_ERRNO
-    errno = ERANGE;
+    errno = ERANGE; // overflow
 #endif
     return q[0][0] + q[0][1];
   } else if (__builtin_expect(ax<0x3d89c604u, 0)){ // |x| < 0.1549/log(10)
@@ -70,7 +70,15 @@ float cr_exp10m1f(float x){
 	    if (__builtin_expect(ax<0x395a966bu, 0)){ // |x| < 4.8e-4/log(10)
 	      if (__builtin_expect(ax<0x36fe4a4bu, 0)){ // |x| < 1.745e-5/log(10)
 		if (__builtin_expect(ax<0x32407f39u, 0)){ // |x| < 2.58e-8/log(10)
-		  if (__builtin_expect(ax<0x245e5bd9u, 0)){ // |x| < 4.82164e-17
+		  if (__builtin_expect(ax<0x245e5bd9u, 0)){ // |x|<0x1.bcb7b2p-55
+#ifdef CORE_MATH_SUPPORT_ERRNO
+                    /* for |x| <= 0x1.bcb7bp-128, exp10m1(x) underflows,
+                       except for rounding away from zero */
+                    if (x != 0 && (__builtin_fabsf (x) <= 0x1.bcb7a8p-128f ||
+                                   (__builtin_fabsf (x) == 0x1.bcb7bp-128f &&
+                                    __builtin_fabsf (x * 11.0f) <= 0x1.31be48p-124f)))
+                      errno = ERANGE; // underflow
+#endif
 		    r = 0x1.26bb1bbb55516p+1;
 		  } else {
 		    if (__builtin_expect(ux == 0x2c994b7bu, 0)) return 0x1.60f974p-37f - 0x1p-90f;

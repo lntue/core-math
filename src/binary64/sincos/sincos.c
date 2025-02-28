@@ -31,6 +31,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <inttypes.h>
 #include <fenv.h>
+#include <errno.h>
 
 // Warning: clang also defines __GNUC__
 #if defined(__GNUC__) && !defined(__clang__)
@@ -2198,6 +2199,10 @@ cr_sincos (double x, double *s, double *c)
     // for x=-0, fma (x, -0x1p-54, x) returns +0
     *s = (x == 0) ? x : __builtin_fma (x, -0x1p-54, x);
     *c = (x == 0) ? 1.0 : 1.0 - 0x1p-54;
+#ifdef CORE_MATH_CHECK_INEXACT
+    if (x != 0 && __builtin_fabs (*s) < 0x1p-1022)
+      errno = ERANGE;
+#endif
     return;
   }
 

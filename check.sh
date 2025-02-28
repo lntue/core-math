@@ -6,8 +6,10 @@
 #     LD_LIBRARY_PATH=/tmp/lib CFLAGS=-I/tmp/include LDFLAGS=-L/tmp/lib ./check.sh ...
 # (2) to check the GNU libc instead of CORE-MATH:
 #     CORE_MATH_CHECK_STD=true ./check.sh ...
-# (3) to check the GNU libc 2.27, installed in say /tmp/install:
+# (3) to check the GNU libc 2.27, installed in say /tmp:
 #     CORE_MATH_CHECK_STD=true CORE_MATH_LAUNCHER="/tmp/lib/ld-2.27.so --library-path /tmp/lib" LDFLAGS="-L /tmp/lib" ./check.sh --worst --rndn exp
+#     for newer versions of the GNU libc, installed in say /tmp:
+#     CORE_MATH_CHECK_STD=true CORE_MATH_LAUNCHER="/tmp/lib/ld-linux-x86-64.so.2 --library-path /tmp/lib:/usr/lib/x86_64-linux-gnu" LDFLAGS="-L /tmp/lib" ./check.sh exp
 
 # ensures CI fails in case of an error
 set -e

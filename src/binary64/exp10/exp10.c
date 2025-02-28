@@ -1,6 +1,6 @@
 /* Correctly rounded 10^x exponential function for binary64 values.
 
-Copyright (c) 2023 Alexei Sibidanov.
+Copyright (c) 2023-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -25,6 +25,7 @@ SOFTWARE.
 */
 
 #include <stdint.h>
+#include <errno.h>
 #if defined(__x86_64__)
 #include <x86intrin.h>
 #endif
@@ -125,17 +126,21 @@ static inline double as_ldexp(double x, i64 i){
 
 static inline double as_todenormal(double x){
 #ifdef __x86_64__
-  __m128i sb; sb[0] = ~(u64)0>>12;
+  __m128i sb = {~(u64)0>>12, 0};
 #if defined(__clang__)
   __m128d r = _mm_set_sd(x);
 #else
   __m128d r; asm("":"=x"(r):"0"(x));
 #endif
   r = _mm_and_pd(r, (__m128d)sb);
+  // forces the underflow exception
+  _mm_setcsr (_mm_getcsr () | _MM_EXCEPT_UNDERFLOW);
   return r[0];
 #else
   b64u64_u ix = {.f = x};
   ix.u &= ~(u64)0>>12;
+  // forces the underflow exception
+  feraiseexcept (FE_UNDERFLOW);
   return ix.f;
 #endif
 }
@@ -300,7 +305,7 @@ static double __attribute__((noinline)) as_exp10_accurate(double x){
 double cr_exp10(double x){
   b64u64_u ix = {.f = x};
   u64 aix = ix.u & (~(u64)0>>1);
-  if(__builtin_expect(aix>0x40734413509f79feull, 0)){
+  if(__builtin_expect(aix>0x40734413509f79feull, 0)){ // |x| > 0x1.34413509f79fep+8
     if(aix>0x7ff0000000000000ull) return x + x; // nan
     if(aix==0x7ff0000000000000ull){
       if(ix.u>>63)
@@ -308,9 +313,20 @@ double cr_exp10(double x){
       else
 	return x;
     }
-    if(!(ix.u>>63)) return 0x1p1023*2.0;
-    if(aix>0x407439b746e36b52ull) return 0x1.5p-1022*0x1p-55;
+    if(!(ix.u>>63)) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      errno = ERANGE;
+#endif
+      return 0x1p1023*2.0; // x > 0x1.34413509f79fep+8
+    }
+    if(aix>0x407439b746e36b52ull) { // x < -0x1.439b746e36b52p+8
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      errno = ERANGE; // underflow
+#endif
+      return 0x1.8p-1022*0x1p-55;
+    }
   }
+  // check x integer to avoid a spurious inexact exception
   if(__builtin_expect(!(ix.u<<16), 0)){
     if( (aix>>48) <= 0x4036){
       double kx = roundeven_finite(x);
@@ -324,6 +340,10 @@ double cr_exp10(double x){
       }
     }
   }
+  /* avoid spurious underflow: for |x| <= 0x1.bcb7b1526e50ep-56,
+     exp10(x) rounds to 1 to nearest */
+  if (__builtin_expect (aix <= 0x3c7bcb7b1526e50eull, 0))
+    return 1.0 + x; // |x| <= 0x1.bcb7b1526e50ep-56
   double t = roundeven_finite(0x1.a934f0979a371p+13*x);
   i64 jt = t, i1 = jt&0x3f, i0 = (jt>>6)&0x3f, ie = jt>>12;
   double t0h = t0[i0][1], t0l = t0[i0][0];
@@ -337,10 +357,14 @@ double cr_exp10(double x){
   double fh = th, fx = th*dx, fl = tl + fx*p;
   double eps = 1.63e-19;
   if(__builtin_expect(ix.u<0xc0733a7146f72a42ull, 0)){
+    // x > -0x1.33a7146f72a42p+8
     double ub = fh + (fl + eps), lb = fh + (fl - eps);
     if(__builtin_expect( lb != ub, 0)) return as_exp10_accurate(x);
     fh = as_ldexp(fh + fl, ie);
-  } else {
+  } else { // x <= -0x1.33a7146f72a42p+8: exp10(x) < 2^-1022
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    errno = ERANGE; // underflow
+#endif
     ix.u = (1-ie)<<52;
     fh = fasttwosum(ix.f, fh, &tl);
     fl += tl;

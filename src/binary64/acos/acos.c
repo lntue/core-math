@@ -221,6 +221,12 @@ double cr_acos (double x){
     zl = __builtin_fma(z,z,-t)*((-0.5/t)*z);
     t = 0.25*t - jd*0x1p-7;
   } else { // |x|<=0.5
+    f0h = 0x1.921fb54442d18p+0;
+    f0l = 0x1.1a62633145c07p-54;
+    // for |x| <= 0x1.cb3b399d747f2p-55, acos(x) rounds to pi/2 to nearest
+    // this avoids a spurious underflow exception with the code below
+    if(__builtin_expect(ax <= 0x7919676733ae8fe4, 0)) return f0h + f0l;
+
     // for |x|<=0.5 we use acos(x) = pi/2 - asin(x) so the argument
     // range for asin is the same for both branches to reuse the lookup
     // tables.
@@ -229,8 +235,6 @@ double cr_acos (double x){
     t = __builtin_fma(x,x,-0x1p-7*jd);
     z = -x;
     zl = 0;
-    f0h = 0x1.921fb54442d18p+0;
-    f0l = 0x1.1a62633145c07p-54;
   }
   // asin(xh+xl) = (xh + xl)*(cc[j][0] + (cc[j][1] + t*Poly(t, cc[j]+2)))
   // where t = xh^2 - j/128 and j = round(128*xh^2)
@@ -283,6 +287,7 @@ double as_acos_refine(double x, double phi){
     {0x0p+0, 0x1p+0}
   };    
 
+  // 0 <= jf <= 32
   double Ch = s[32-jf][1], Cl = s[32-jf][0], Sh = s[jf][1], Sl = s[jf][0];
 
   double ax = __builtin_fabs(x);
@@ -299,6 +304,7 @@ double as_acos_refine(double x, double phi){
   double dv =  (Ch*dsl + Cl*dsh) - (Sh*dcl + Sl*dch) - (dSc - dCs);
   v = fasttwosum(v,dv,&dv);
   double sgn = __builtin_copysign(1.0, x), jt = 32 - jf*sgn;
+  // 0 <= jt <= 64
   static const double c[][2] = {
     {0x1p+0, -0x1.fc2c76456515bp-108}, {0x1.5555555555555p-3, 0x1.5555555623513p-57},
     {0x1.3333333333333p-4, 0x1.9997e3427441bp-59}, {0x1.6db6db6db6db7p-5, -0x1.cb95ff08658e6p-62},
@@ -311,6 +317,7 @@ double as_acos_refine(double x, double phi){
   fh = muldd(v,dv, fh,fl, &fl);
 
   double ph = jt * 0x1.921fb54442dp-5, pl = 0x1.8469898cc518p-53*jt, ps = -0x1.fc8f8cbb5bf6cp-102*jt;
+  // since 0 <= jt <= 64, ph and pl are exact
   pl = sum(fh,fl, pl,ps, &ps);
   ph = fasttwosum(ph,pl, &pl);
   pl = fasttwosum(pl,ps, &ps);
@@ -328,7 +335,7 @@ double as_acos_refine(double x, double phi){
     if(x==-0x1.011c543f23a17p-2 ) return 0x1.d318c90d9e8b7p+0  - 0x1p-54;
     if(x== 0x1.ffffffffffdc0p-1 ) return 0x1.8000000000024p-22 + 0x1p-76;
     if(x== 0x1.53ea6c7255e88p-4 ) return 0x1.7cdacb6bbe707p+0  + 0x1p-54;
-    if(x== 0x1.fd737be914578p-11) return 0x1.91e006d41d8d8p+0  + 0x1p-54;
+    if(x== 0x1.fd737be914578p-11) return 0x1.91e006d41d8d8p+0  + 0x1.8p-53;
     if(x== 0x1.fffffffffff70p-1 ) return 0x1.8000000000009p-23 + 0x1p-77;
     b64u64_u w = {.f = ps};
     if((w.u^t.u)>>63)

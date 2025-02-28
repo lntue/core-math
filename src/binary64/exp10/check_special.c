@@ -99,7 +99,6 @@ static void
 check_inexact (void)
 {
   double x, y;
-  fexcept_t flagp;
   for (x = 0.0; x <= 22.; x += 1.0)
   {
     for (int r = 0; r < 4; r++)
@@ -107,7 +106,7 @@ check_inexact (void)
       fesetround (rnd1[rnd]);
       feclearexcept (FE_INEXACT);
       y = cr_exp10 (x);
-      fegetexceptflag (&flagp, FE_INEXACT);
+      int flagp = fetestexcept (FE_INEXACT);
       if (flagp)
       {
         printf ("Inexact flag set for x=%la (y=%la)\n", x, y);

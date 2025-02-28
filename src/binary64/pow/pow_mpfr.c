@@ -46,11 +46,16 @@ double ref_pow(double x, double y) {
     return x + y;
 
   mpfr_t z, _x, _y;
+  int underflow = mpfr_flags_test (MPFR_FLAGS_UNDERFLOW);
   mpfr_inits2(53, z, _x, _y, NULL);
   mpfr_set_d(_x, x, MPFR_RNDN);
   mpfr_set_d(_y, y, MPFR_RNDN);
   int inex = mpfr_pow(z, _x, _y, rnd2[rnd]);
-  mpfr_subnormalize(z, inex, rnd2[rnd]);
+  inex = mpfr_subnormalize(z, inex, rnd2[rnd]);
+  /* Workaround for bug in mpfr_subnormalize for MPFR <= 4.2.1: the underflow
+     flag is set by mpfr_subnormalize() even for exact results. */
+  if (inex == 0 && !underflow)
+    mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
   double ret = mpfr_get_d(z, rnd2[rnd]);
   mpfr_clears(z, _x, _y, NULL);
   return ret;

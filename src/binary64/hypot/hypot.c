@@ -1,6 +1,6 @@
 /* Correctly-rounded Euclidean distance function (hypot) for binary64 values.
 
-Copyright (c) 2022 Alexei Sibidanov.
+Copyright (c) 2022-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -114,14 +114,22 @@ static inline double fasttwosum(double x, double y, double *e){
   return s;
 }
 
-static double __attribute__((noinline)) as_hypot_denorm(u64 a, u64 b){
+/* This routine deals with the case where both x and y are subnormal.
+   a is the encoding of x, and b is the encoding of y.
+   We assume x >= y > 0 thus 2^52 > a >= b > 0. */
+static double __attribute__((noinline)) as_hypot_denorm(u64 a, u64 b, const fexcept_t flag){
   double op = 1.0 + 0x1p-54, om = 1.0 - 0x1p-54;
   double af = (i64)a, bf = (i64)b;
+  // af and bf are x and y multiplied by 2^1074, thus integers
   a <<= 1;
   b <<= 1;
   u64 rm = __builtin_sqrt(af*af + bf*bf);
   u64 tm = rm << 1;
   i64 D = a*a - tm*tm + b*b, sD = D>>63, um = (rm^sD) - sD, drm = sD + 1;
+  // D is the difference between a^2+b^2 and tm^2
+  // sD is the sign bit of D (0 for D >= 0, 1 for D < 0)
+  // um = rm if sD = 0 or rm is even, and rm-2 if sD = 1 and rm is odd
+  // drm = 1 if D >= 0, drm = 2 if D < 0
   i64 dd = (um<<3) + 4, pD;
   rm -= drm;
   drm += sD;
@@ -133,15 +141,21 @@ static double __attribute__((noinline)) as_hypot_denorm(u64 a, u64 b){
   } while(__builtin_expect((D^pD)>0, 0));
   pD = (sD&D)+(~sD&pD);
   if(__builtin_expect(pD != 0, 1)){
-    if(__builtin_expect(op == om, 1)){
+    if(__builtin_expect(op == om, 1)){ // rounding to nearest
       i64 sum = pD - 4*rm - 1;
       if(__builtin_expect(sum != 0, 1))
 	rm += (sum>>63) + 1;
       else
 	rm += rm&1;
-    } else {
-      rm += op>1.0;
+    } else { // directed rounding
+      rm += op>1.0; // rounding upwards
     }
+    if(!(rm>>52)){ // trigger underflow exception _after_ rounding for inexact results
+      volatile double trig_uf = 0x1p-1022;
+      trig_uf *= trig_uf;
+    }
+  } else {
+    set_flags(flag);
   }
   b64u64_u xi = {.u = rm};
   return xi.f;
@@ -213,11 +227,12 @@ static double  __attribute__((noinline)) as_hypot_hard(double x, double y, const
   return xi.f;
 }
 
+// case hypot(x,y) >= 2^1024
 static double __attribute__((noinline)) as_hypot_overflow (void){
   volatile double z = 0x1.fffffffffffffp1023;
   double f = z + z;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-  if(f>z) errno = ERANGE;
+  errno = ERANGE; // always overflow, whatever the rounding mode
 #endif
   return f;
 }
@@ -242,12 +257,12 @@ double cr_hypot(double x, double y){
   double u = __builtin_fmax(x,y), v = __builtin_fmin(x,y);
   b64u64_u xd = {.f = u}, yd = {.f = v};
   ey = yd.u;
-  if(__builtin_expect(!(ey>>52),0)){
+  if(__builtin_expect(!(ey>>52),0)){ // y is subnormal
     if(!yd.u) return xd.f;
     ex = xd.u;
-    if(__builtin_expect(!(ex>>52),0)){
+    if(__builtin_expect(!(ex>>52),0)){ // x is subnormal too
       if(!ex) return 0;
-      return as_hypot_denorm(ex,ey);
+      return as_hypot_denorm(ex,ey,flag);
     }
     int nz = __builtin_clzll(ey);
     ey <<= nz-11;
@@ -257,7 +272,13 @@ double cr_hypot(double x, double y){
     yd.f = t.f;
   }
   u64 de = xd.u - yd.u;
-  if(__builtin_expect(de>(27ll<<52),0)) return __builtin_fma(0x1p-27, v, u);
+  if(__builtin_expect(de>(27ll<<52),0)) {
+    double r = __builtin_fma(0x1p-27, v, u);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    if (r > 0x1.fffffffffffffp+1023) errno = ERANGE; // overflow
+#endif
+    return r;
+  }
   i64 off = (0x3ffll<<52) - (xd.u & emsk);
   xd.u += off;
   yd.u += off;

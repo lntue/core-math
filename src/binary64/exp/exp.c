@@ -1,6 +1,6 @@
 /* Correctly rounded exponential function for binary64 values.
 
-Copyright (c) 2022-2023 Alexei Sibidanov.
+Copyright (c) 2022-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -124,19 +124,24 @@ static inline double as_ldexp(double x, i64 i){
 #endif
 }
 
+// sets the exponent of a binary64 number to 0 (subnormal range)
 static inline double as_todenormal(double x){
 #ifdef __x86_64__
-    __m128i sb; sb[0] = ~(u64)0>>12;
+    __m128i sb = {~(u64)0>>12, 0};
 #if defined(__clang__)
     __m128d r = _mm_set_sd(x);
 #else
     __m128d r; asm("":"=x"(r):"0"(x));
 #endif
     r = _mm_and_pd(r, (__m128d)sb);
+    // forces the underflow exception
+    _mm_setcsr (_mm_getcsr () | _MM_EXCEPT_UNDERFLOW);
     return r[0];
 #else
     b64u64_u ix = {.f = x};
     ix.u &= ~(u64)0>>12;
+    // forces the underflow exception
+    feraiseexcept (FE_UNDERFLOW);
     return ix.f;
 #endif
 }
@@ -182,6 +187,7 @@ static double __attribute__((noinline)) as_exp_database(double x, double f){
   return f;
 }
 
+// for 0 <= i < 2^6, t0[i] is a double-double approximation of 2^(i/2^6)
 static const double t0[][2] = {
   {0x0p+0, 0x1p+0}, {-0x1.19083535b085ep-56, 0x1.02c9a3e778061p+0},
   {0x1.d73e2a475b466p-55, 0x1.059b0d3158574p+0}, {0x1.186be4bb285p-57, 0x1.0874518759bc8p+0},
@@ -216,6 +222,8 @@ static const double t0[][2] = {
   {-0x1.e9c23179c2894p-54, 0x1.ea4afa2a490dap+0}, {0x1.dc7f486a4b6bp-54, 0x1.efa1bee615a27p+0},
   {0x1.9d3e12dd8a18ap-54, 0x1.f50765b6e454p+0}, {0x1.74853f3a5931ep-55, 0x1.fa7c1819e90d8p+0}
 };
+
+// for 0 <= i < 2^6, t1[i] is a double-double approximation of 2^(i/2^12)
 static const double t1[][2] = {
   {0x0p+0, 0x1p+0}, {0x1.ae8e38c59c72ap-54, 0x1.000b175effdc7p+0},
   {-0x1.7b5d0d58ea8f4p-58, 0x1.00162f3904052p+0}, {0x1.4115cb6b16a8ep-54, 0x1.0021478e11ce6p+0},
@@ -265,12 +273,15 @@ static double __attribute__((cold,noinline)) as_exp_accurate(double x){
   double t1h = t1[i1][1], t1l = t1[i1][0];
   double tl, th = muldd(t0h,t0l, t1h,t1l, &tl);
 
+  /* Use Cody-Waite argument reduction: since |x| < 745, we have |t| < 2^23,
+     thus since l2h is exactly representable on 29 bits, l2h*t is exact. */
   const double l2h = 0x1.62e42ffp-13, l2l = 0x1.718432a1b0e26p-47, l2ll = 0x1.9ff0342542fc3p-102;
   double dx = x - l2h*t, dxl = l2l*t, dxll = l2ll*t + __builtin_fma(l2l,t,-dxl);
   double dxh = dx + dxl; dxl = (dx - dxh) + dxl + dxll;
   double fl, fh = opolydd(dxh,dxl, 7,ch, &fl);
   fh = muldd(dxh,dxl, fh,fl, &fl);
   if(__builtin_expect(ix.u>0xc086232bdd7abcd2ull, 0)){
+    // x < -0x1.6232bdd7abcd2p+9
     ix.u = (1-ie)<<52;
     fh = muldd(fh,fl, th,tl, &fl);
     fh = fastsum(th,tl, fh,fl, &fl);
@@ -306,23 +317,30 @@ static double __attribute__((cold,noinline)) as_exp_accurate(double x){
 double cr_exp(double x){
   b64u64_u ix = {.f = x};
   u64 aix = ix.u & (~(u64)0>>1);
-  if(__builtin_expect(aix == 0, 0)) return 1.0;
-  if(__builtin_expect(aix>=0x40862e42fefa39f0ull, 0)){
+  // exp(x) rounds to 1 to nearest for |x| <= 0x1p-54
+  if(__builtin_expect(aix <= 0x3c90000000000000ull, 0)) // |x| <= 0x1p-54
+    return 1.0 + x;
+  if(__builtin_expect(aix>=0x40862e42fefa39f0ull, 0)){ // |x| >= 0x1.62e42fefa39fp+9
     if(aix>0x7ff0000000000000ull) return x + x; // nan
-    if(aix==0x7ff0000000000000ull){
+    if(aix==0x7ff0000000000000ull){ // |x| = inf
       if(ix.u>>63)
-	return 0.0;
+	return 0.0; // x = -inf
       else
-	return x;
+	return x; // x = inf
     }
-    if(!(ix.u>>63)){
+    if(!(ix.u>>63)){ // x >= 0x1.62e42fefa39fp+9
 #ifdef CORE_MATH_SUPPORT_ERRNO
       errno = ERANGE;
 #endif
       volatile double z = 0x1p1023;
       return z*z;
     }
-    if(aix>=0x40874910d52d3052ull) return 0x1.5p-1022 * 0x1p-55;
+    if (aix>=0x40874910d52d3052ull) { // x <= -0x1.74910d52d3052p+9
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      errno = ERANGE; // underflow
+#endif
+      return 0x1.8p-1022 * 0x1p-55;
+    }
   }
   const double s = 0x1.71547652b82fep+12;
   double t = roundeven_finite(x*s);
@@ -331,18 +349,24 @@ double cr_exp(double x){
   double t1h = t1[i1][1], t1l = t1[i1][0];
   double tl, th = muldd(t0h,t0l, t1h,t1l, &tl);
   const double l2h = 0x1.62e42ffp-13, l2l = 0x1.718432a1b0e26p-47;
+  /* Use Cody-Waite argument reduction: since |x| < 745, we have |t| < 2^23,
+     thus since l2h is exactly representable on 29 bits, l2h*t is exact. */
   double dx = (x - l2h*t) + l2l*t, dx2 = dx*dx;
   static const double ch[] = {0x1p+0, 0x1p-1, 0x1.55555557e54ffp-3, 0x1.55555553a12f4p-5};
   double p = (ch[0] + dx*ch[1]) + dx2*(ch[2] + dx*ch[3]);
   double fh = th, tx = th*dx, fl = tl + tx*p;
   double eps = 1.64e-19;
   if(__builtin_expect(ix.u>0xc086232bdd7abcd2ull, 0)){
+    // subnormal case: x < -0x1.6232bdd7abcd2p+9
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    errno = ERANGE; // underflow
+#endif
     ix.u = (1-ie)<<52;
     double e;
     fh = fasttwosum(ix.f, fh, &e);
     fl += e;
     double ub = fh + (fl + eps), lb = fh + (fl - eps);
-    if(__builtin_expect( ub != lb, 0)) return as_exp_accurate(x);
+    if (__builtin_expect(ub != lb, 0)) return as_exp_accurate(x);
     fh = as_todenormal(lb);
   } else {
     double ub = fh + (fl + eps), lb = fh + (fl - eps);

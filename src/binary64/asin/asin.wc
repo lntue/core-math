@@ -1,6 +1,7 @@
 # corner cases
 0x1.fffffffffffffp-7
 0x1p-6
+0x1.ffffffffffffep-1023
 # this is the union of the "asn" inputs from the file testlibm-data from
 # https://www.vinc17.net/research/testlibm/ (update from 2020-11-27), and
 # all inputs with at least 44 identical bits after the round bit

@@ -1,6 +1,6 @@
 /* Correctly-rounded tangent function for binary64 value.
 
-Copyright (c) 2022-2023 Paul Zimmermann and Tom Hubrecht
+Copyright (c) 2022-2025 Paul Zimmermann and Tom Hubrecht
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -31,6 +31,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <inttypes.h>
 #include <fenv.h>
+#include <errno.h>
 
 // Warning: clang also defines __GNUC__
 #if defined(__GNUC__) && !defined(__clang__)
@@ -2269,11 +2270,19 @@ cr_tan (double x)
      For e=-26, (1) rewrites 4*c^3 < 3 which yields c <= 0x1.d12ed0af1a27ep-1.
   */
   uint64_t ux = t.u & 0x7fffffffffffffff;
-  // 0x3e4d12ed0af1a27e = 0x1.d12ed0af1a27ep-27
-  if (ux <= 0x3e4d12ed0af1a27e)
+  if (ux <= 0x3e4d12ed0af1a27eull) { // |x| <= 0x1.d12ed0af1a27ep-27
+    if (x == 0)
+      return x;
     // Taylor expansion of tan(x) is x + x^3/3 around zero
-    // for x=-0, fma (x, 0x1p-54, x) returns +0
-    return (x == 0) ? x :__builtin_fma (x, 0x1p-54, x);
+      /* We have underflow exactly when 0 < |x| < 2^-1022:
+         for RNDU, tan(2^-1022-2^-1074) would round to 2^-1022-2^-1075
+         with unbounded exponent range */
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    if (x != 0 && __builtin_fabs (x) < 0x1p-1022)
+      errno = ERANGE; // underflow
+#endif
+    return __builtin_fma (x, 0x1p-54, x);
+  }
 
   double h, l, err;
   err = tan_fast (&h, &l, x);

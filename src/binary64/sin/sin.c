@@ -31,6 +31,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <inttypes.h>
 #include <fenv.h>
+#include <errno.h>
 
 // Warning: clang also defines __GNUC__
 #if defined(__GNUC__) && !defined(__clang__)
@@ -2057,10 +2058,20 @@ cr_sin (double x)
   */
   uint64_t ux = t.u & 0x7fffffffffffffff;
   // 0x3e57137449123ef6 = 0x1.7137449123ef6p-26
-  if (ux <= 0x3e57137449123ef6)
+  if (ux <= 0x3e57137449123ef6) {
+    if (x == 0)
+      return x;
     // Taylor expansion of sin(x) is x - x^3/6 around zero
     // for x=-0, fma (x, -0x1p-54, x) returns +0
-    return (x == 0) ? x : __builtin_fma (x, -0x1p-54, x);
+    /* We have underflow when 0 < |x| < 2^-1022 or when |x| = 2^-1022
+       and rounding towards zero. */
+    double res = __builtin_fma (x, -0x1p-54, x);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    if (__builtin_fabs (x) < 0x1p-1022 || __builtin_fabs (res) < 0x1p-1022)
+      errno = ERANGE; // underflow
+#endif
+    return res;
+  }
 
   double h, l, err;
   err = sin_fast (&h, &l, x);

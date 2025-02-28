@@ -111,6 +111,20 @@ In addition, in `src/generic/foo`, you will need the following file:
 - `random_under_test.h`: defining a function `random_under_test`,
   which samples suitable inputs for `foo`
 
+## Support of underflow
+
+CORE-MATH always supports underflow, with the rule of "underflow after
+rounding": if the rounded result (with unbounded exponent range) is in
+the subnormal range, then underflow is raised. Otherwise underflow is
+not raised.
+
+## Support of errno
+
+The support for errno is provided with -DCORE_MATH_SUPPORT_ERRNO
+(not activated by default). The value of errno is set to ERANGE in
+case of overflow or of underflow (following the "underflow after
+rounding" rule).
+
 ## Notes
 
 The CORE-MATH code assumes all double-precision computations are rounded to

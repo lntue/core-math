@@ -92,8 +92,7 @@ check (double x)
   fesetround (rnd1[rnd]);
   feclearexcept (FE_INEXACT);
   double y2 = cr_exp2 (x);
-  fexcept_t inex2;
-  fegetexceptflag (&inex2, FE_INEXACT);
+  int inex2 = fetestexcept (FE_INEXACT);
   if (! is_equal (y1, y2))
   {
     printf ("FAIL x=%la ref=%la z=%la\n", x, y1, y2);

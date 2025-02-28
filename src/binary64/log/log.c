@@ -662,7 +662,7 @@ cr_log (double x)
       }
       else {
 #ifdef CORE_MATH_SUPPORT_ERRNO
-        errno = ERANGE;
+        errno = ERANGE; // pole error
 #endif
         return 1.0 / -0.0;
       }

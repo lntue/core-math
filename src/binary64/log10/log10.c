@@ -1,6 +1,6 @@
 /* Correctly rounded base-10 logarithm of binary64 values.
 
-Copyright (c) 2022-2023 INRIA and CERN.
+Copyright (c) 2022-2025 INRIA and CERN.
 Authors: Paul Zimmermann and Tom Hubrecht.
 
 This file is part of the CORE-MATH project
@@ -703,7 +703,7 @@ cr_log10 (double x)
       }
       else {
 #ifdef CORE_MATH_SUPPORT_ERRNO
-        errno = ERANGE;
+        errno = ERANGE; // pole error
 #endif
         return 1.0 / -0.0;
       }

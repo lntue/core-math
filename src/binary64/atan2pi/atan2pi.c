@@ -217,13 +217,20 @@ atan2pi_accurate (double y, double x)
   tint_t z[1], p[1], q[1];
   if (inv) // case |y| > |x|
   {
-    div_tint_d (z, x, y);
     // atan2pi_begin
+    // avoid spurious underflow in div_tint_d() below
+    d64u64 vx = {.f = x}, vy = {.f = y};
+    int ex = (vx.u >> 52) & 0x7ff, ey = (vy.u >> 52) & 0x7ff;
     /* For |y/x| large, atan2pi(y,x) is close to 1/2 or -1/2. More precisely,
        for z > 0x1.45f306dc9c882p+53, atanpi(z) rounds to 1/2 to nearest.
        When x < 0, since atan2pi(y,x) > 1/2 for y>0, we get 1/2 for even a
-       smaller value of |y/x|. */
-    if (z->ex <= -54) // |y/x| > 2^54
+       smaller value of |y/x|.
+       If y is normal, then 2^(ey-1023) <= |y| < 2^(ey-1022), and whatever
+       x is normal or subnormal, |x| < 2^(ex-1022), thus
+       |y/x| > 2^(ey-ex-1) thus if ey - ex > 54, |y/x| > 2^54.
+       If y is subnormal, then x is subnormal too since we are in the case
+       |y| > |x|, thus ey = ex, and the test below never holds. */
+    if (ey - ex > 54) // |y/x| > 2^54
     {
       if (x > 0)
         return (y > 0) ? 0.5 - 0x1p-55 : -0.5 + 0x1p-55;
@@ -231,17 +238,28 @@ atan2pi_accurate (double y, double x)
         return (y > 0) ? 0.5 + 0x1p-54 : -0.5 - 0x1p-54;
     }
     // atan2pi_end
+    div_tint_d (z, x, y);
   }
-  else
+  else // |x| >= |y|
   {
-    div_tint_d (z, y, x);
     // atan2pi_begin
-    /* For |y/x| small and x < 0, atan2pi(y,x) is close to 1 or -1.
-       More precisely,
-       for z <= 0x1.921fb54442d18p-53, 1-atanpi(z) rounds to 1 to nearest. */
-    if (x < 0 && z->ex <= -54) // |y/x| < 2^-54
-      return (y > 0) ? 1.0 - 0x1p-54 : -1.0 + 0x1p-54;
+    if (x < 0) {
+      // avoid spurious underflow in div_tint_d() below
+      d64u64 vx = {.f = x}, vy = {.f = y};
+      int ex = (vx.u >> 52) & 0x7ff, ey = (vy.u >> 52) & 0x7ff;
+      /* For |y/x| small and x < 0, atan2pi(y,x) is close to 1 or -1.
+         More precisely,
+         for z <= 0x1.921fb54442d18p-53, 1-atanpi(z) rounds to 1 to nearest.
+         If x is normal, then 2^(ex-1023) <= |x| < 2^(ex-1022), and whatever
+         y is normal or subnormal, |y| < 2^(ey-1022), thus
+         |y/x| < 2^(ey-ex+1) thus if ey - ex < -54, |y/x| < 2^-54.
+         If x is subnormal, then y is subnormal too since we are in the case
+         |x| >= |y|, thus ex = ey, and the test below never holds. */
+      if (ey - ex < -54) // |y/x| < 2^-54
+        return (y > 0) ? 1.0 - 0x1p-54 : -1.0 + 0x1p-54;
+    }
     // atan2pi_end
+    div_tint_d (z, y, x);
   }
   // below when we write y/x it should be read x/y when |x/y| < 1
   // |z - y/x| < 2^-185.53 * |z| (relative error from div_tint_d)

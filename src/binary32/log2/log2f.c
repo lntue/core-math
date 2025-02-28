@@ -112,18 +112,18 @@ float cr_log2f(float x) {
   uint64_t m = ux&(~0u>>9); m <<= 52-23;
   int e = (ux>>23) - 0x7f;
   if (__builtin_expect(ux < 1u<<23 || ux >= 0xffu<<23, 0)) {
-    if (ux==0||ux==(1u<<31)) {
+    if (ux==0||ux==(1u<<31)) { // x = +/-0
 #ifdef CORE_MATH_SUPPORT_ERRNO
       errno = ERANGE;
 #endif
-      return -__builtin_inff(); // +0.0 || -0.0
+      return -1.0f / 0.0f; // should raise 'Divide by zero' exception.
     }
     uint32_t inf_or_nan = ((ux>>23)&0xff) == 0xff, nan = inf_or_nan && (ux<<9);
-    if (ux>>31 && !nan) {
+    if (ux>>31 && !nan) { // x < 0
 #ifdef CORE_MATH_SUPPORT_ERRNO
       errno = EDOM;
 #endif
-      return __builtin_nanf("-");
+      return (x - x) / (x - x);  // should raise 'Invalid operation' exception.
     }
     if (inf_or_nan) return x + x;
     // subnormal

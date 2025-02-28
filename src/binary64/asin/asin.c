@@ -25,7 +25,6 @@ SOFTWARE.
 */
 
 #include <errno.h>
-#include <math.h>
 #include <fenv.h>
 #include <stdint.h>
 
@@ -393,7 +392,7 @@ double cr_asin(double x){
     feraiseexcept (FE_INVALID);
     return __builtin_nan (">1");
   } else if (__builtin_expect(e < -6,0)){ /* |x| < 2^-6 */
-    if (__builtin_expect (e < -26,0)) /* |x| < 2^-26 */
+    if (__builtin_expect (e < -26,0)) { /* |x| < 2^-26 */
       /* For |x| < 2^-2, we have |asin(x)-x| < 0.25x^3
          thus the difference between asin(x) and x is less than
          0.25|x|^3, and since |x| < 2^53 ulp(x) and |x| < 2^-26:
@@ -404,7 +403,15 @@ double cr_asin(double x){
          The expression x + 2^-54*x rounds identically, where the constant
          2^-54 can be replaced by any expression c <= 2^-54, such that
          c*x < 1/2 ulp(x). */
+      /* We have underflow exactly when 0 < |x| < 2^-1022:
+         for RNDU, asin(2^-1022-2^-1074) would round to 2^-1022-2^-1075
+         with unbounded exponent range */
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      if (x != 0 && __builtin_fabs (x) < 0x1p-1022)
+        errno = ERANGE; // underflow
+#endif
       return __builtin_fma (x, 0x1p-54, x);
+    }
     /* now 2^-26 <= |x| < 2^-6 */
     /* We also have |x| = 2^e*sm/2^63, since e <= -7 we have e+1 <= -6,
        thus we write |x| = 2^(e+1)*y with y=sm/2^64 */
@@ -598,7 +605,6 @@ double cr_asin(double x){
        3 and more), thus by 24.08.
      */
 
-    t.u = v;
     fi.bl = 0xd313198a2e037073;
     fi.bh = 0x3243f6a8885a308;
     /* fi.a/2^127 approximates pi/2/64 */

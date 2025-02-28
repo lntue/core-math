@@ -1,6 +1,6 @@
 /* Correctly-rounded sine of binary32 value.
 
-Copyright (c) 2022-2023 Alexei Sibidanov.
+Copyright (c) 2022-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -181,12 +181,24 @@ float cr_sinf(float x){
   uint32_t ax = t.u<<1;
   int ia;
   double z0 = x, z;
-  if (__builtin_expect(ax>0x99000000u || ax<0x73000000, 0)){
-    if (__builtin_expect(ax<0x73000000, 1)){
-      if (__builtin_expect(ax<0x66000000u, 0)){
+  if (__builtin_expect(ax>0x99000000u || ax<0x73000000u, 0)){
+    // |x| > 0x1p+26 or |x| < 0x1p-12
+    if (__builtin_expect(ax<0x73000000u, 1)){ // |x| < 0x1p-12
+      if (__builtin_expect(ax<0x66000000u, 0)){ // |x| < 0x1p-25
 	if (__builtin_expect(ax==0u, 0))
 	  return x;
-	return __builtin_fmaf(-x, __builtin_fabsf(x), x);
+        float res = __builtin_fmaf(-x, __builtin_fabsf(x), x);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+        /* The Taylor expansion of sin(x) at x=0 is x - x^3/6 + o(x^3).
+           For |x| > 2^-126 we have no underflow, whatever the rounding mode.
+           For |x| < 2^-126, since |sin(x)| < |x|, we always have underflow.
+           For |x| = 2^-126, we have underflow for rounding towards zero,
+           i.e., when sin(x) rounds to nextbelow(2^-126).
+           In summary, we have underflow whenever |x|<2^-126 or |res|<2^-126. */
+        if (__builtin_fabsf (x) < 0x1p-126f || __builtin_fabsf (res) < 0x1p-126f)
+          errno = ERANGE; // underflow
+#endif
+        return res;
       }
       return (-0x1.555556p-3f*x)*(x*x) + x;
     }

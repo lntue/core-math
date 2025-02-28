@@ -26,6 +26,7 @@ SOFTWARE.
 */
 
 #include <stdint.h>
+#include <errno.h>
 
 // Warning: clang also defines __GNUC__
 #if defined(__GNUC__) && !defined(__clang__)
@@ -233,8 +234,16 @@ double cr_atan(double x){
     if(__builtin_expect(at == 0, 0)) return x; // atan(+/-0) = +/-0
     static const double ch2[] = {
       -0x1.5555555555555p-2, 0x1.99999999998c1p-3, -0x1.249249176aecp-3, 0x1.c711fd121ae8p-4};
-    if (at<(u64)0x3e40000000000000ull) // |x| < 0x1p-27
-      return __builtin_fma (-0x1p-54, x, x);
+    if (at<(u64)0x3e40000000000000ull) { // |x| < 0x1p-27
+      /* We have underflow when 0 < |x| < 2^-1022 or when |x| = 2^-1022
+         and rounding towards zero. */
+      double res = __builtin_fma (-0x1p-54, x, x);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      if (__builtin_fabs (x) < 0x1p-1022 || __builtin_fabs (res) < 0x1p-1022)
+        errno = ERANGE; // underflow
+#endif
+      return res;
+    }
     double x2 = x*x, x3 = x*x2, x4 = x2*x2;
     double f = x3*((ch2[0] + x2*ch2[1]) + x4*(ch2[2] + x2*ch2[3]));
     double ub = (f + f*0x4.8p-52) + x, lb = (f - f*0x2.8p-52) + x;

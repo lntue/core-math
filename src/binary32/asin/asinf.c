@@ -67,8 +67,22 @@ float cr_asinf(float x){
   b32u32_u t = {.f = x};
   uint32_t ax = t.u<<1;
   if(__builtin_expect(ax>0x7f<<24, 0)) return as_special(x);
-  if(__builtin_expect(ax<0x7ec29000u, 1)){
-    if (__builtin_expect(ax<115<<24, 0)) return __builtin_fmaf(x, 0x1p-25, x);
+  if(__builtin_expect(ax<0x7ec29000u, 1)){ // |x| < 0x1.7d83a6p+0
+    if (__builtin_expect(ax<115<<24, 0)) { // |x| < 0x1p-12
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      /* The Taylor expansion of asin(x) at x=0 is x + x^3/6 + o(x^3),
+         thus for |x| >= 2^-126 we have no underflow, whatever the
+         rounding mode.
+         For |x| < 2^-126 and rounding towards zero, we have underflow.
+         For x = nextbelow(2^-126) = 0x1.fffffcp-127, asin(x) would round
+         upward to 0x1.fffffep-127 with unbounded exponent range, which is not
+         representable, thus we have underflow too.
+         In summary, we have underflow whenever |x| < 2^-126. */
+      if (x != 0 && __builtin_fabsf (x) < 0x1p-126f)
+        errno = ERANGE; // underflow
+#endif
+      return __builtin_fmaf(x, 0x1p-25, x);
+    }
     static const double b[] =
       {0x1.0000000000005p+0, 0x1.55557aeca105dp-3, 0x1.3314ec3db7d12p-4, 0x1.775738a5a6f92p-5,
        0x1.5d5f7ce1c8538p-8, 0x1.605c6d58740fp-2, -0x1.5728b732d73c6p+1, 0x1.f152170f151ebp+3,

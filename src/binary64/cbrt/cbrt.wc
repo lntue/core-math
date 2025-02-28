@@ -105562,3 +105562,5 @@
 -1
 +0x1.fffffffffffffp+1023
 -0x1.fffffffffffffp+1023
+# the following input is wrongly rounded by LLVM libc 19.1.7
+0x1.fffffffffffffp-1

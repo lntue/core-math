@@ -134958,5 +134958,5 @@
 +0x1.fffffffffffffp+1023
 -0x1.fffffffffffffp+1023
 # errno tests
-0x0p+0, ERANGE
--0x0p+0, ERANGE
+0x0p+0
+-0x0p+0

@@ -1,6 +1,6 @@
 /* Correctly-rounded complementary error function for the binary64 format
 
-Copyright (c) 2022-2023 Alexei Sibidanov, Paul Zimmermann, Tom Hubrecht and
+Copyright (c) 2022-2025 Alexei Sibidanov, Paul Zimmermann, Tom Hubrecht and
 Claude-Pierre Jeannerod.
 
 This file is part of the CORE-MATH project
@@ -41,6 +41,7 @@ SOFTWARE.
        Cambridge University Press, 2011.
 */
 
+#include <errno.h>
 #include <stdint.h>
 
 // Warning: clang also defines __GNUC__
@@ -846,7 +847,7 @@ erfc_asympt_fast (double *h, double *l, double x)
      For the relative error, since |(yh+yl)^2| >= 1/4:
      |uh + ul - yh^2| < 2^-101.41 * |uh+ul|.
      And relatively to 1/x^2:
-     yh + yl = 1/x * (1 + eps1)       with |eps1| < 2^-102.67  
+     yh + yl = 1/x * (1 + eps1)       with |eps1| < 2^-102.67
      uh + ul = (yh+yl)^2 * (1 + eps2) with |eps2| < 2^-101.41
      This yields:
      |uh + ul - 1/x| < 2^-100.90 * |uh+ul|.
@@ -898,7 +899,11 @@ erfc_asympt_fast (double *h, double *l, double x)
      (1+2^-71.804)*(1+2^-74.139)*(1+2^-97.9)*(1+2^-67.184)*(1+2^-80)-1
      < 2^-67.115
   */
-  return 0x1.d9p-68 * *h; /* 2^-67.115 < 0x1.d9p-68 */
+  // avoid a spurious underflow in 0x1.d9p-68 * h
+  if (*h >= 0x1.151b9a3fdd5c9p-955)
+    return 0x1.d9p-68 * *h; /* 2^-67.115 < 0x1.d9p-68 */
+  else
+    return 0x1p-1022; // this overestimates 0x1.d9p-68 * h
 }
 
 /* given -0x1.7744f8f74e94bp2 < x < 0x1.b39dc41e48bfdp+4,
@@ -1021,7 +1026,12 @@ erfc_asympt_accurate (double x)
 
   /* subnormal exceptions */
   if (x == 0x1.a8f7bfbd15495p+4)
+  {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    errno = ERANGE; // underflow
+#endif
     return __builtin_fma (0x1p-1074, -0.25, 0x1.99ef5883f656cp-1024);
+  }
 
   double h, l;
   /* first approximate exp(-x^2) */
@@ -1092,6 +1102,10 @@ erfc_asympt_accurate (double x)
     /* add corr*2^e */
     res += __builtin_ldexp (corr, e);
   }
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  if (res < 0x1p-1022) // erfc(x) > 0 for x > 0
+    errno = ERANGE;
+#endif
   return res;
 }
 
@@ -1205,6 +1219,9 @@ cr_erfc (double x)
         if (at == 0x7ff0000000000000) return 0.0;  // +Inf
         return x + x;                              // NaN
       }
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      errno = ERANGE;
+#endif
       return 0x1p-1074 * 0.25;                     // 0 or 2^-1074 wrt rounding
     }
 
@@ -1213,7 +1230,7 @@ cr_erfc (double x)
       return __builtin_fma (-x, 0x1p-54, 1.0);
   }
 
-  /* now -0x1.7744f8f74e94bp2 < x < -0x1.c5bf891b4ef6ap-54
+  /* now -0x1.7744f8f74e94bp+2 < x < -0x1.c5bf891b4ef6ap-54
      or 0x1.c5bf891b4ef6ap-55 < x < 0x1.b39dc41e48bfdp+4 */
   double h, l, err;
   err = cr_erfc_fast (&h, &l, x);

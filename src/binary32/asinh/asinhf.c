@@ -25,6 +25,7 @@ SOFTWARE.
 */
 
 #include <stdint.h>
+#include <errno.h>
 
 // Warning: clang also defines __GNUC__
 #if defined(__GNUC__) && !defined(__clang__)
@@ -109,10 +110,21 @@ float cr_asinhf(float x) {
   b32u32_u t = {.f = x};
   t.u &= ~0u>>1;
   double xs = x;
-  if(__builtin_expect(t.u<=0x3e815667u, 0)){
-    if(__builtin_expect(t.u<=0x39ddb3d7u, 0)){
+  if(__builtin_expect(t.u<=0x3e815667u, 0)){ // |x| <= 0x1.02accep-2
+    if(__builtin_expect(t.u<=0x39ddb3d7u, 0)){ // |x| <= 0x1.bb67aep-12
       if(__builtin_expect(t.u==0, 0)) return x;
-      return __builtin_fmaf(x,-0x1p-25f,x);
+      float res = __builtin_fmaf(x,-0x1p-25f,x);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      /* The Taylor expansion of asinh(x) at x=0 is x - x^3/6 + o(x^3).
+         For |x| > 2^-126 we have no underflow, whatever the rounding mode.
+         For |x| < 2^-126, since |asinh(x)| < |x|, we always have underflow.
+         For |x| = 2^-126, we have underflow for rounding towards zero,
+         i.e., when asinh(x) rounds to nextbelow(2^-126).
+         In summary, we have underflow whenever |x| < 2^-126 or |res| < 2^-126. */
+      if (__builtin_fabsf (x) < 0x1p-126f || __builtin_fabsf (res) < 0x1p-126f)
+        errno = ERANGE; // underflow
+#endif
+      return res;
     }
     static const double c[] =
       {0x1.5555555555553p-3, -0x1.3333333330e9dp-4, 0x1.6db6db67cb37ap-5, -0x1.f1c71699375dp-6,

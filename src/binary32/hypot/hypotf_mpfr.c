@@ -25,12 +25,30 @@ SOFTWARE. */
 
 #include <mpfr.h>
 #include "fenv_mpfr.h"
+#include <stdint.h>
+
+typedef union {float f; uint32_t u;} b32u32;
 
 /* reference code using MPFR */
 float
 ref_hypot (float x, float y)
 {
   mpfr_t xm, ym, zm;
+
+  b32u32 xi = {.f = x}, yi = {.f = y};
+  if((xi.u<<1)<(0xff8ull<<20) && (xi.u<<1)>(0xff0ull<<20)) // x = sNAN
+    return x + y; // will return qNaN
+  if((yi.u<<1)<(0xff8ull<<20) && (yi.u<<1)>(0xff0ull<<20)) // y = sNAN
+    return x + y; // will return qNaN
+  if((xi.u<<1) == 0){ // x = +/-0
+    yi.u = (yi.u<<1)>>1;
+    return yi.f;
+  }
+  if((yi.u<<1) == 0){ // y = +/-0
+    xi.u = (xi.u<<1)>>1;
+    return xi.f;
+  }
+
   mpfr_init2 (xm, 24);
   mpfr_init2 (ym, 24);
   mpfr_init2 (zm, 24);

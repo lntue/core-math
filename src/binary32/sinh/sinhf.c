@@ -1,6 +1,6 @@
 /* Correctly-rounded hyperbolic sine function for binary32 value.
 
-Copyright (c) 2022-2023 Alexei Sibidanov.
+Copyright (c) 2022-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -94,7 +94,7 @@ float cr_sinhf(float x){
   b32u32_u t = {.f = x};
   double z = x;
   uint32_t ux = t.u<<1;
-  if(__builtin_expect(ux>0x8565a9f8u, 0)){ // |x| >~ 89.4
+  if(__builtin_expect(ux>0x8565a9f8u, 0)){ // |x| > 0x1.65a9f8p+6
     float sgn = __builtin_copysignf(2.0f, x);
     if(ux>=0xff000000u) {
       if(ux<<8) return x + x; // nan
@@ -108,8 +108,21 @@ float cr_sinhf(float x){
   }
   if(__builtin_expect(ux<0x7c000000u, 0)){ // |x| < 0.125
     if(__builtin_expect(ux<=0x74250bfeu, 0)){ // |x| <= 0x1.250bfep-11
-      if(__builtin_expect(ux<0x66000000u, 0)) // |x| < 0x1p-24
+      if(__builtin_expect(ux<0x66000000u, 0)) { // |x| < 0x1p-24
+#ifdef CORE_MATH_SUPPORT_ERRNO
+        /* The Taylor expansion of sinh(x) at x=0 is x + x^3/6 + o(x^3),
+           thus for |x| >= 2^-126 we have no underflow, whatever the
+           rounding mode.
+           For |x| < 2^-126 and rounding towards zero, we have underflow.
+           For x = nextbelow(2^-126) = 0x1.fffffcp-127, sinh(x) would round
+           upward to 0x1.fffffep-127 with unbounded exponent range, which is not
+           representable, thus we have underflow too.
+           In summary, we have underflow whenever |x| < 2^-126. */
+        if (x != 0 && __builtin_fabsf (x) < 0x1p-126f)
+          errno = ERANGE; // underflow
+#endif
 	return __builtin_fmaf(x, __builtin_fabsf(x), x);
+      }
       if(__builtin_expect(st[0].uarg == ux, 0)){
 	float sgn = __builtin_copysignf(1.0f, x);
 	return sgn*st[0].rh + sgn*st[0].rl;

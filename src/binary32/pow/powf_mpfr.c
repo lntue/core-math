@@ -23,13 +23,28 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
+#include <stdint.h>
 #include <mpfr.h>
+#include <math.h>
 #include "fenv_mpfr.h"
+
+typedef union { float f; uint32_t u; } f32_u;
+
+// return non-zero iff x is a signaling NaN
+static inline int is_snan(float x) {
+  f32_u v = {.f = x};
+  return isnan (x) && !(v.u & (1ull << 22));
+}
 
 /* reference code using MPFR */
 float
 ref_pow (float x, float y)
 {
+  // since MPFR does not distinguish between qNaN and sNaN, we have to
+  // deal with signaling NaNs separately
+  if (is_snan (x) || is_snan (y))
+    return x + y;
+
   mpfr_t xm, ym, zm;
   mpfr_init2 (xm, 24);
   mpfr_init2 (ym, 24);

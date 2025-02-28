@@ -1,6 +1,6 @@
 /* Correctly-rounded tangent of binary32 value.
 
-Copyright (c) 2022 Alexei Sibidanov.
+Copyright (c) 2022-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -131,9 +131,22 @@ float cr_tanf(float x){
   int e = (t.u>>23)&0xff, i;
   double z;
   if (__builtin_expect(e<127+28, 1)){ // |x| < 2^28
-    if (__builtin_expect(e<115, 0)){
-      if (__builtin_expect(e<102, 0))
+    if (__builtin_expect(e<115, 0)){ // |x| < 2^-13
+      if (__builtin_expect(e<102, 0)) { // |x| < 2^-26
+#ifdef CORE_MATH_SUPPORT_ERRNO
+        /* The Taylor expansion of tan(x) at x=0 is x + x^3/3 + o(x^3),
+           thus for |x| >= 2^-126 we have no underflow, whatever the
+           rounding mode.
+           For |x| < 2^-126 and rounding towards zero, we have underflow.
+           For x = nextbelow(2^-126) = 0x1.fffffcp-127, tan(x) would round
+           upward to 0x1.fffffep-127 with unbounded exponent range, which is
+           not representable, thus we have underflow too.
+           In summary, we have underflow whenever |x| < 2^-126. */
+        if (x != 0 && __builtin_fabsf (x) < 0x1p-126f)
+          errno = ERANGE; // underflow
+#endif
 	return __builtin_fmaf(x, __builtin_fabsf(x), x);
+      }
       float x2 = x*x;
       return __builtin_fmaf(x, 0x1.555556p-2f*x2, x);
     }

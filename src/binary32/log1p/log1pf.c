@@ -1,6 +1,6 @@
 /* Correctly-rounded biased argument natural logarithm function for binary32 value.
 
-Copyright (c) 2023 Alexei Sibidanov.
+Copyright (c) 2023-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -87,10 +87,18 @@ float cr_log1pf(float x) {
   double z = x;
   b32u32_u t = {.f = x};
   uint32_t ux = t.u, ax = ux&(~0u>>1);
-  if(__builtin_expect(ax<0x3c880000, 1)){
-    if(__builtin_expect(ax<0x33000000, 0)){
+  if(__builtin_expect(ax<0x3c880000u, 1)){ // |x| < 0x1.1p-6
+    if(__builtin_expect(ax<0x33000000u, 0)){ // |x| < 0x1p-25
       if(!ax) return x;
-      return __builtin_fmaf(x,-x,x);
+      float res = __builtin_fmaf(x,-x,x);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      /* log1p(x) underflows exactly when |res| < 2^-126
+         and for x=-0x1.fffffcp-127 and rounding downwards */
+      if (__builtin_fabsf (res) < 0x1p-126f ||
+          (x == -0x1.fffffcp-127f && res == -0x1p-126f))
+        errno = ERANGE; // underflow
+#endif
+      return res;
     }
     double z2 = z*z, z4 = z2*z2;
     double f = z2*((b[1] + z*b[2]) + z2*(b[3] + z*b[4]) + z4*((b[5] + z*b[6]) + z2*b[7]));
