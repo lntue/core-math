@@ -353,7 +353,8 @@ check (testcase ts)
     /* If x,y are normal numbers and z is an exact infinity, or if there is
        an overflow, we should have errno=ERANGE. */
     int expected_erange = (is_inf (z1) && inex1 == 0) ||
-      mpfr_flags_test (MPFR_FLAGS_OVERFLOW);
+      mpfr_flags_test (MPFR_FLAGS_OVERFLOW) ||
+      mpfr_flags_test (MPFR_FLAGS_UNDERFLOW);
     if (expected_erange && errno != ERANGE)
     {
       printf ("Missing errno=ERANGE for x=%la y=%la (z=%la)\n", ts.x, ts.y, z1);

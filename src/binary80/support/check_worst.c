@@ -193,6 +193,9 @@ check (long double x, long double y)
 #endif
   fesetround(rnd1[rnd]);
   feclearexcept (FE_INEXACT | FE_UNDERFLOW | FE_OVERFLOW);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  errno = 0;
+#endif
   long double z2 = cr_function_under_test(x, y);
   int inex2 = fetestexcept (FE_INEXACT);
   /* Note: the test z1 != z2 would not distinguish +0 and -0. */
@@ -269,7 +272,7 @@ check (long double x, long double y)
 #ifdef CORE_MATH_CHECK_INEXACT
   if ((inex1 == 0) && (inex2 != 0))
   {
-    printf ("Spurious inexact exception for x=%La y=%La (z=%La)\n", x, y, z1);
+    printf ("Spurious inexact exception for x,y=%La,%La (z=%La)\n", x, y, z1);
     fflush (stdout);
 #ifdef DO_NOT_ABORT
     return 1;
@@ -279,7 +282,7 @@ check (long double x, long double y)
   }
   if ((inex1 != 0) && (inex2 == 0))
   {
-    printf ("Missing inexact exception for x=%La y=%La (z=%La)\n", x, y, z1);
+    printf ("Missing inexact exception for x,y=%La,%La (z=%La)\n", x, y, z1);
     fflush (stdout);
 #ifdef DO_NOT_ABORT
     return 1;
@@ -295,7 +298,7 @@ check (long double x, long double y)
   {
     if (is_nan (z1) && errno != EDOM)
     {
-      printf ("Missing errno=EDOM for x=%La y=%La (z=%La)\n", x, y, z1);
+      printf ("Missing errno=EDOM for x,y=%La,%La (z=%La)\n", x, y, z1);
       fflush (stdout);
 #ifndef DO_NOT_ABORT
       exit(1);
@@ -303,7 +306,7 @@ check (long double x, long double y)
     }
     if (!is_nan (z1) && errno == EDOM)
     {
-      printf ("Spurious errno=EDOM for x=%La y=%La (z=%La)\n", x, y, z1);
+      printf ("Spurious errno=EDOM for x,y=%La,%La (z=%La)\n", x, y, z1);
       fflush (stdout);
 #ifndef DO_NOT_ABORT
       exit(1);
@@ -313,10 +316,11 @@ check (long double x, long double y)
     /* If x,y are normal numbers and z is an exact infinity, or if there is
        an overflow, we should have errno=ERANGE. */
     int expected_erange = (is_inf (z1) && inex1 == 0) ||
-      mpfr_flags_test (MPFR_FLAGS_OVERFLOW);
+      mpfr_flags_test (MPFR_FLAGS_OVERFLOW) ||
+      mpfr_flags_test (MPFR_FLAGS_UNDERFLOW);
     if (expected_erange && errno != ERANGE)
     {
-      printf ("Missing errno=ERANGE for x=%La y=%La (z=%La)\n", x, y, z1);
+      printf ("Missing errno=ERANGE for x,y=%La,%La (z=%La)\n", x, y, z1);
       fflush (stdout);
 #ifndef DO_NOT_ABORT
       exit(1);
@@ -324,7 +328,7 @@ check (long double x, long double y)
     }
     if (!expected_erange && errno == ERANGE)
     {
-      printf ("Spurious errno=ERANGE for x=%La y=%La (z=%La)\n", x, y, z1);
+      printf ("Spurious errno=ERANGE for x,y=%La,%La (z=%La)\n", x, y, z1);
       fflush (stdout);
 #ifndef DO_NOT_ABORT
       exit(1);
