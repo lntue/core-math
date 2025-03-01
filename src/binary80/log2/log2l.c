@@ -1,6 +1,6 @@
 /* Correctly rounded log2l function for binary80 floating point format.
 
-Copyright (c) 2024 Alexei Sibidanov and Paul Zimmermann
+Copyright (c) 2024-2025 Alexei Sibidanov and Paul Zimmermann
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -39,6 +39,7 @@ SOFTWARE.
 
 #include <assert.h>
 #include <stdint.h>
+#include <errno.h>
 
 // Warning: clang also defines __GNUC__
 #if defined(__GNUC__) && !defined(__clang__)
@@ -763,7 +764,12 @@ cr_log2l (long double x)
   int ex = t.e, e = ex - 0x3fff;
   if (__builtin_expect ((ex&0x7fff)==0, 0)) // x=+-0 or positive subnormal
   {
-    if (!t.m) return (long double) -1.0 / 0.0; // x=+-0
+    if (!t.m) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      errno = ERANGE; // pole error
+#endif
+      return (long double) -1.0 / 0.0; // x=+-0
+    }
     int k = __builtin_clzll (t.m);
     e -= k - 1;
     t.m <<= k;
