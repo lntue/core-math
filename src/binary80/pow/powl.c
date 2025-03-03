@@ -1,6 +1,6 @@
 /* Correctly rounded powl function for binary80 values.
 
-Copyright (c) 2024 Sélène Corbineau and Paul Zimmermann
+Copyright (c) 2024-2025 Sélène Corbineau and Paul Zimmermann
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -38,6 +38,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <fenv.h>
 #include <stdbool.h>
+#include <errno.h>
 
 #ifndef CORE_MATH_FAIL_QUIET
 #include <stdio.h>
@@ -105,7 +106,7 @@ get_flag (void)
   return _mm_getcsr ();
 #else
   fexcept_t flag;
-  fegetexceptflag (&flag, FE_INEXACT);
+  fegetexceptflag (&flag, FE_ALL_EXCEPT);
   return flag;
 #endif
 }
@@ -116,7 +117,7 @@ set_flag (FLAG_T flag)
 #if 0 // __x86_64__ 
   _mm_setcsr (flag);
 #else
-  fesetexceptflag (&flag, FE_INEXACT);
+  fesetexceptflag (&flag, FE_ALL_EXCEPT);
 #endif
 }
 
@@ -1044,7 +1045,7 @@ long double fastpath_roundtest(double rh, double rl, int extra_exp,
 
 	int wanted_exponent = extra_exp + 0x3c00 + eh;
 
-	if(__builtin_expect(wanted_exponent <= 0, 0)) {
+	if(__builtin_expect(wanted_exponent <= 0, 0)) { // underflow case
 		int shiftby = 1 - wanted_exponent;
 
 		if(__builtin_expect(shiftby >= 64, 0)) {	
@@ -1108,6 +1109,15 @@ long double fastpath_roundtest(double rh, double rl, int extra_exp,
 	if(__builtin_expect(wanted_exponent >= 32767, 0)) {
 		return (invert ? -0x1p16383L - 0x1p16383L : 0x1p16383L + 0x1p16383L);
 	}
+
+	// inexact underflow case
+	if (__builtin_expect (wanted_exponent == 0 && !*fail, 0)) {
+	  feraiseexcept (FE_UNDERFLOW);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+	  errno = ERANGE; // underflow
+#endif
+	}
+
 	return v.f;
 }
 
@@ -1630,8 +1640,9 @@ long double accurate_path(long double x, long double y, FLAG_T inex, bool invert
 
 		qint_subnormalize(subqr,extralow, q_r);
 
+		// restore the inexact flag
 		if(((cvt_r.e&0x7fff) != 0x7fff) && !subqr->hl && !subqr->lh)
-			{set_flag(inex);}
+		  set_flag (inex);
 
 		/* If the result overflows, even if it would be exact with an unbounded
 		   exponent range, the inexact flag must not be cleared. The mantissa checks
@@ -1655,7 +1666,6 @@ long double accurate_path(long double x, long double y, FLAG_T inex, bool invert
 }
 
 long double cr_powl(long double x, long double y) {
-
 	const b80u80_t cvt_x = {.f = x}, cvt_y = {.f = y};
 	int x_exp = (cvt_x.e&0x7fff) - 16383;
 	int y_exp = (cvt_y.e&0x7fff) - 16383;
@@ -1678,6 +1688,9 @@ long double cr_powl(long double x, long double y) {
 		                    || (!is_integer(y) && cvt_x.m && x_exp != 0x7fff-16383)
 		                    ,0)) {
 			feraiseexcept(FE_INVALID);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+			errno = EDOM;
+#endif
 			return __builtin_nanl("");
 		}
 
@@ -1706,7 +1719,12 @@ long double cr_powl(long double x, long double y) {
 	if(__builtin_expect(!cvt_x.m, 0)) { // x == +-0
 		if(_isnan(y)) {feraiseexcept(FE_INVALID); return __builtin_nanl("");}
 		if(!cvt_y.m) {return 1L;} // y == 0
-		if(cvt_y.e>>15 && cvt_y.e != 0xffff) {feraiseexcept(FE_DIVBYZERO);}
+		if(cvt_y.e>>15 && cvt_y.e != 0xffff) {
+		  feraiseexcept(FE_DIVBYZERO);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+		  errno = ERANGE; // pole error
+#endif
+		}
 		return lt1 ? sign*0L : sign*inf;
 	}
 
@@ -1725,6 +1743,9 @@ long double cr_powl(long double x, long double y) {
 		if(y_exp == 0x7fff - 16383) {
 			return lt1 ? sign*0L : sign*inf;
 		} else {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+		  errno = ERANGE; // overflow
+#endif
 			return lt1 ? (sign*0x1p-16445L)*.25L : (sign*0x1p16383L)*2L;
 		}
 	} else if(__builtin_expect(y_exp <= -81, 0)) {

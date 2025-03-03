@@ -1,6 +1,6 @@
 /* Correctly-rounded power function for two binary64 values.
 
-Copyright (c) 2022, 2023 CERN and Inria
+Copyright (c) 2022-2025 CERN and Inria
 Authors: Tom Hubrecht and Paul Zimmermann
 
 This file is part of the CORE-MATH project
@@ -37,6 +37,7 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <stdio.h>
+#include <errno.h>
 
 /*
   Type definition
@@ -495,7 +496,10 @@ long double qint_told(qint64_t* a, uint64_t extralow,
 	}
 
 	if(__builtin_expect(a->ex >= 16384, 0)) {// overflow case
-		return invert ? (-0x1p16383L - 0x1p16383L) : (0x1p16383L + 0x1p16383L);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+	  errno = ERANGE;
+#endif
+	  return invert ? (-0x1p16383L - 0x1p16383L) : (0x1p16383L + 0x1p16383L);
 	}
 	return v.f;
 }
