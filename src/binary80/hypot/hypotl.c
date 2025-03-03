@@ -189,6 +189,7 @@ cr_hypotl (long double x, long double y)
         // in case sx.e = 0x7ffe, this will round to +Inf as wanted
         sx.e ++;
         sx.m = 0x8000000000000000ull;
+	feraiseexcept (FE_OVERFLOW);
 #ifdef CORE_MATH_SUPPORT_ERRNO
 	errno = ERANGE; // overflow
 #endif
