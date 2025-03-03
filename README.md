@@ -114,13 +114,27 @@ In addition, in `src/generic/foo`, you will need the following file:
 ## Support of underflow
 
 CORE-MATH always supports underflow, with the rule of "underflow after
-rounding": if the rounded result (with unbounded exponent range) is in
-the subnormal range, then underflow is raised. Otherwise underflow is
-not raised.
+rounding": if the rounded result (with unbounded exponent range and full
+target precision) is in the subnormal range, then underflow is raised.
+Otherwise underflow is not raised. As in the C standard, underflow is not
+raised when the result is exact.
+
+## Support of overflow
+
+CORE-MATH always supports overflow: if the rounded result (with unbounded
+exponent range) is not representable, then overflow is raised.
+Otherwise overflow is not raised.
+
+## Support of inexact
+
+The support of the inexact exception is provided with -DCORE_MATH_CHECK_INEXACT
+(not activated by default). When CORE_MATH_CHECK_INEXACT is defined, the
+inexact exception (from fenv.h) is raised when the result is inexact, and
+is not raised when the result is exact.
 
 ## Support of errno
 
-The support for errno is provided with -DCORE_MATH_SUPPORT_ERRNO
+The support of errno is provided with -DCORE_MATH_SUPPORT_ERRNO
 (not activated by default). The value of errno is set to ERANGE in
 case of overflow or of underflow (following the "underflow after
 rounding" rule).
