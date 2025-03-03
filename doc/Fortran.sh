@@ -73,6 +73,16 @@ do
 	echo "   end function cr_${I}"
 	echo "end interface"
 done
+echo "! double sincos function"
+I=sincos
+echo "interface"
+echo "   pure subroutine cr_${I}(x, s, c) bind(c,name='cr_${I}')"
+echo "     use, intrinsic :: iso_c_binding, only: c_double"
+echo "     implicit none"
+echo "     real(kind=c_double), intent(in), value :: x"
+echo "     real(kind=c_double), intent(out) :: s, c"
+echo "   end subroutine cr_${I}"
+echo "end interface"
 if [ "$1" = "has_extended" ]
 then
 	echo "! extended unary functions"
@@ -88,7 +98,7 @@ then
 		echo "end interface"
 	done
 	echo "! extended binary functions"
-	for I in pow
+	for I in hypot pow
 	do
 		echo "interface"
 		echo "   pure function cr_${I}l(x, y) bind(c,name='cr_${I}l')"
