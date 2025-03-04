@@ -92,7 +92,10 @@ float cr_sinpif(float x){
   } else if(__builtin_expect(s>30, 0)){ // |x| < 0x1p-14
     double z = x, z2 = z*z;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-    if (x != 0 && __builtin_fabsf (x) <= 0x1.45f306p-128f)
+  /* For |x| <= 0x1.45f3p-128, sinpi(x) underflows whatever the rounding mode,
+     and for |x| >= nextabove(0x1.45f3p-128) = 0x1.45f308p-128, sinpi(x) does
+     not underflow whatever the rounding mode. */
+    if (x != 0 && __builtin_fabsf (x) <= 0x1.45f3p-128f)
       errno = ERANGE; // underflow
 #endif
     return z*(0x1.921fb54442d18p+1 + z2*(-0x1.4abbce625be53p+2));
