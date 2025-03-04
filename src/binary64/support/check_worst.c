@@ -313,7 +313,7 @@ check (testcase ts)
   int inex2 = fetestexcept (FE_INEXACT);
   if ((inex1 == 0) && (inex2 != 0))
   {
-    printf ("Spurious inexact exception for x=%la y=%la (z=%la)\n", ts.x, ts.y, z1);
+    printf ("Spurious inexact exception for x,y=%la,%la (z=%la)\n", ts.x, ts.y, z1);
     fflush (stdout);
 #ifndef DO_NOT_ABORT
     exit(1);
@@ -321,7 +321,7 @@ check (testcase ts)
   }
   if ((inex1 != 0) && (inex2 == 0))
   {
-    printf ("Missing inexact exception for x=%la y=%la (z=%la)\n", ts.x, ts.y, z1);
+    printf ("Missing inexact exception for x,y=%la,%la (z=%la)\n", ts.x, ts.y, z1);
     fflush (stdout);
 #ifndef DO_NOT_ABORT
     exit(1);
@@ -335,7 +335,7 @@ check (testcase ts)
   {
     if (is_nan (z1) && errno != EDOM)
     {
-      printf ("Missing errno=EDOM for x=%la y=%la (z=%la)\n", ts.x, ts.y, z1);
+      printf ("Missing errno=EDOM for x,y=%la,%la (z=%la)\n", ts.x, ts.y, z1);
       fflush (stdout);
 #ifndef DO_NOT_ABORT
       exit(1);
@@ -343,7 +343,7 @@ check (testcase ts)
     }
     if (!is_nan (z1) && errno == EDOM)
     {
-      printf ("Spurious errno=EDOM for x=%la y=%la (z=%la)\n", ts.x, ts.y, z1);
+      printf ("Spurious errno=EDOM for x,y=%la,%la (z=%la)\n", ts.x, ts.y, z1);
       fflush (stdout);
 #ifndef DO_NOT_ABORT
       exit(1);
@@ -357,7 +357,7 @@ check (testcase ts)
       mpfr_flags_test (MPFR_FLAGS_UNDERFLOW);
     if (expected_erange && errno != ERANGE)
     {
-      printf ("Missing errno=ERANGE for x=%la y=%la (z=%la)\n", ts.x, ts.y, z1);
+      printf ("Missing errno=ERANGE for x,y=%la,%la (z=%la)\n", ts.x, ts.y, z1);
       fflush (stdout);
 #ifndef DO_NOT_ABORT
       exit(1);
@@ -365,7 +365,7 @@ check (testcase ts)
     }
     if (!expected_erange && errno == ERANGE)
     {
-      printf ("Spurious errno=ERANGE for x=%la y=%la (z=%la)\n", ts.x, ts.y, z1);
+      printf ("Spurious errno=ERANGE for x,y=%la,%la (z=%la)\n", ts.x, ts.y, z1);
       fflush (stdout);
 #ifndef DO_NOT_ABORT
       exit(1);
