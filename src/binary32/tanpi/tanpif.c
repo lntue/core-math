@@ -106,8 +106,11 @@ float cr_tanpif(float x){
   }
 
 #ifdef CORE_MATH_SUPPORT_ERRNO
-    if (__builtin_fabsf (x) <= 0x1.45f306p-128f)
-      errno = ERANGE; // underflow
+  /* For |x| <= 0x1.45f3p-128, tanpi(x) underflows whatever the rounding mode,
+     and for |x| >= nextabove(0x1.45f3p-128) = 0x1.45f308p-128, tanpi(x) does
+     not underflow whatever the rounding mode. */
+  if (__builtin_fabsf (x) <= 0x1.45f3p-128f)
+    errno = ERANGE; // underflow
 #endif
 
   ix.f = zf;
