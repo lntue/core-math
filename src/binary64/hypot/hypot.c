@@ -117,8 +117,7 @@ static inline double fasttwosum(double x, double y, double *e){
 /* This routine deals with the case where both x and y are subnormal.
    a is the encoding of x, and b is the encoding of y.
    We assume x >= y > 0 thus 2^52 > a >= b > 0. */
-static double __attribute__((noinline)) as_hypot_denorm(u64 a, u64 b, const fexcept_t flag){
-  double op = 1.0 + 0x1p-54, om = 1.0 - 0x1p-54;
+static double __attribute__((noinline)) as_hypot_denorm(u64 a, u64 b){
   double af = (i64)a, bf = (i64)b;
   int underflow = 0;
   // af and bf are x and y multiplied by 2^1074, thus integers
@@ -145,6 +144,7 @@ static double __attribute__((noinline)) as_hypot_denorm(u64 a, u64 b, const fexc
   rm = tm >> 1; // truncate the low bit
   underflow = rm < 0x10000000000000ull;
   if(__builtin_expect(rb || sb, 1)){
+    double op = 1.0 + 0x1p-54, om = 1.0 - 0x1p-54;
     if(__builtin_expect(op == om, 1)){ // rounding to nearest
       if(__builtin_expect(sb, 1)) {
 	rm += rb;
@@ -169,8 +169,8 @@ static double __attribute__((noinline)) as_hypot_denorm(u64 a, u64 b, const fexc
       errno = ERANGE; // underflow
 #endif
     }
-  } else
-    set_flags(flag); // restore flags, no underflow for exact result
+  }
+  // else the result is exact, and we have no underflow
   b64u64_u xi = {.u = rm};
   return xi.f;
 }
@@ -276,7 +276,7 @@ double cr_hypot(double x, double y){
     ex = xd.u;
     if(__builtin_expect(!(ex>>52),0)){ // x is subnormal too
       if(!ex) return 0;
-      return as_hypot_denorm(ex,ey,flag);
+      return as_hypot_denorm(ex,ey);
     }
     int nz = __builtin_clzll(ey);
     ey <<= nz-11;
