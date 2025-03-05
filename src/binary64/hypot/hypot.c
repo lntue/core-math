@@ -120,48 +120,57 @@ static inline double fasttwosum(double x, double y, double *e){
 static double __attribute__((noinline)) as_hypot_denorm(u64 a, u64 b, const fexcept_t flag){
   double op = 1.0 + 0x1p-54, om = 1.0 - 0x1p-54;
   double af = (i64)a, bf = (i64)b;
+  int underflow = 0;
   // af and bf are x and y multiplied by 2^1074, thus integers
   a <<= 1;
   b <<= 1;
   u64 rm = __builtin_sqrt(af*af + bf*bf);
-  u64 tm = rm << 1;
-  i64 D = a*a - tm*tm + b*b, sD = D>>63, um = (rm^sD) - sD, drm = sD + 1;
-  // D is the difference between a^2+b^2 and tm^2
-  // sD is the sign bit of D (0 for D >= 0, 1 for D < 0)
-  // um = rm if sD = 0 or rm is even, and rm-2 if sD = 1 and rm is odd
-  // drm = 1 if D >= 0 (rm too small), drm = 2 if D < 0 (rm too large)
-  i64 dd = (um<<3) + 4, pD;
-  rm -= drm;
-  drm += sD;
-  // now drm = 1 if D >= 0, drm = 3 if D < 0
-  do {
-    pD = D;
-    rm += drm;
-    D -= dd;
-    dd += 8;
-  } while(__builtin_expect((D^pD)>0, 0));
-  // stop when pD (previous D) and D have different signs
-  pD = (sD&D)+(~sD&pD);
-  if(__builtin_expect(pD != 0, 1)){
+  i64 tm = rm << 1;
+  i64 D = a*a + b*b - tm*tm;
+  // D = a^2+b^2 - tm^2
+  while (D > 2 * tm) { // tm too small
+    D -= 2 * tm + 1;   // (tm+1)^2 = tm^2 + 2*tm + 1
+    tm ++;
+  }
+  while (D < 0) {      // tm too large
+    D += 2 * tm - 1;   // (tm-1)^2 = tm^2 - 2*tm + 1
+    tm --;
+  }
+  // tm = floor(sqrt(a^2+b^2)) and 0 <= D = a^2+b^2 - tm^2 < 2*tm+1
+  // if D=0 and tm is even, the result is exact
+  // if D=0 and tm is odd, the result is a midpoint
+  int rb = tm & 1; // round bit for rm
+  int rb2 = D >= tm; // round bit for tm
+  int sb = D != 0; // sticky bit for rm
+  rm = tm >> 1; // truncate the low bit
+  underflow = rm < 0x10000000000000ull;
+  if(__builtin_expect(rb || sb, 1)){
     if(__builtin_expect(op == om, 1)){ // rounding to nearest
-      i64 sum = pD - 4*rm - 1;
-      if(__builtin_expect(sum != 0, 1))
-	rm += (sum>>63) + 1;
-      else
-	rm += rm&1; // even rounding
-    } else { // directed rounding
-      rm += op>1.0; // rounding upwards
+      if(__builtin_expect(sb, 1)) {
+	rm += rb;
+        // we have no underflow when rm is now 2^52 and rb2 != 0
+        // Remark: we cannot have a^2+b^2 = (tm+1/2)^2 exactly
+        // since this would mean a^2+b^2 = tm^2+tm+1/4,
+        // thus a^2+b^2 would be an odd multiple of 2^-1077
+        // (since ulp(tm) = 2^-1075)
+        if (rm >> 52 && rb2) underflow = 0;
+      }
+      else // sticky bit is 0, round bit is 1: underflow doos not change
+	rm += rm & 1; // even rounding
+    } else if (op > 1.0) { // rounding upwards
+      rm ++;
+      // we have no underflow when rm is now 2^52 and tm was odd
+      if (rm >> 52 && (tm & 1)) underflow = 0;
     }
-    if(!(rm>>52)){ // trigger underflow exception _after_ rounding for inexact results
+    if(underflow){ // trigger underflow exception _after_ rounding for inexact results
       volatile double trig_uf = 0x1p-1022;
-      trig_uf *= trig_uf;
+      trig_uf *= trig_uf; // triggers underflow
 #ifdef CORE_MATH_SUPPORT_ERRNO
       errno = ERANGE; // underflow
 #endif
     }
-  } else {
-    set_flags(flag);
-  }
+  } else
+    set_flags(flag); // restore flags, no underflow for exact result
   b64u64_u xi = {.u = rm};
   return xi.f;
 }
