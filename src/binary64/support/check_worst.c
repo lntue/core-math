@@ -268,7 +268,7 @@ check (testcase ts)
             ts.x, ts.y, z1);
     fflush (stdout);
 #ifdef DO_NOT_ABORT
-    return 1;
+    return;
 #else
     exit(1);
 #endif
@@ -279,7 +279,7 @@ check (testcase ts)
             ts.x, ts.y, z1);
     fflush (stdout);
 #ifdef DO_NOT_ABORT
-    return 1;
+    return;
 #else
     exit(1);
 #endif
@@ -292,7 +292,7 @@ check (testcase ts)
             ts.x, ts.y, z1);
     fflush (stdout);
 #ifdef DO_NOT_ABORT
-    return 1;
+    return;
 #else
     exit(1);
 #endif
@@ -303,7 +303,7 @@ check (testcase ts)
             ts.x, ts.y, z1);
     fflush (stdout);
 #ifdef DO_NOT_ABORT
-    return 1;
+    return;
 #else
     exit(1);
 #endif

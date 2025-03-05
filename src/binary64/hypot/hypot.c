@@ -129,16 +129,18 @@ static double __attribute__((noinline)) as_hypot_denorm(u64 a, u64 b, const fexc
   // D is the difference between a^2+b^2 and tm^2
   // sD is the sign bit of D (0 for D >= 0, 1 for D < 0)
   // um = rm if sD = 0 or rm is even, and rm-2 if sD = 1 and rm is odd
-  // drm = 1 if D >= 0, drm = 2 if D < 0
+  // drm = 1 if D >= 0 (rm too small), drm = 2 if D < 0 (rm too large)
   i64 dd = (um<<3) + 4, pD;
   rm -= drm;
   drm += sD;
+  // now drm = 1 if D >= 0, drm = 3 if D < 0
   do {
     pD = D;
     rm += drm;
     D -= dd;
     dd += 8;
   } while(__builtin_expect((D^pD)>0, 0));
+  // stop when pD (previous D) and D have different signs
   pD = (sD&D)+(~sD&pD);
   if(__builtin_expect(pD != 0, 1)){
     if(__builtin_expect(op == om, 1)){ // rounding to nearest
@@ -146,13 +148,16 @@ static double __attribute__((noinline)) as_hypot_denorm(u64 a, u64 b, const fexc
       if(__builtin_expect(sum != 0, 1))
 	rm += (sum>>63) + 1;
       else
-	rm += rm&1;
+	rm += rm&1; // even rounding
     } else { // directed rounding
       rm += op>1.0; // rounding upwards
     }
     if(!(rm>>52)){ // trigger underflow exception _after_ rounding for inexact results
       volatile double trig_uf = 0x1p-1022;
       trig_uf *= trig_uf;
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      errno = ERANGE; // underflow
+#endif
     }
   } else {
     set_flags(flag);
@@ -275,7 +280,8 @@ double cr_hypot(double x, double y){
   if(__builtin_expect(de>(27ll<<52),0)) {
     double r = __builtin_fma(0x1p-27, v, u);
 #ifdef CORE_MATH_SUPPORT_ERRNO
-    if (r > 0x1.fffffffffffffp+1023) errno = ERANGE; // overflow
+    b64u64_u t = {.f = r};
+    if (t.u >= 0x7ff0000000000000ull) errno = ERANGE; // overflow
 #endif
     return r;
   }
