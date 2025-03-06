@@ -1260,7 +1260,8 @@ static void exp_3 (qint64_t *r, qint64_t *x) {
   exact is non-zero iff x^y is exactly representable in binary64.
 */
 static char
-exact_pow (double *r, double x, double y, const dint64_t *z, int exact)
+exact_pow (double *r, double x, double y, const dint64_t *z,
+           __attribute__((unused)) int exact)
 {
   int64_t _s = z->sgn ? -1 : 1;
 
