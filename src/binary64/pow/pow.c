@@ -1094,10 +1094,10 @@ exp_1 (double *eh, double *el, double rh, double rl, double s) {
 static void exp_2 (dint64_t *r, dint64_t *x) {
   dint64_t K, y;
 
-  if (x->sgn == 0x1 && x->ex >= 10) // underflow
+  if (x->ex >= 10) // underflow or overflow
   {
     cp_dint (r, x);
-    r->ex = -1076;
+    r->ex = (x->sgn == 0x1) ? -1076 : 1025;
     r->sgn = 0;
     return;
   }
