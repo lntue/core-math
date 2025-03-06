@@ -61,16 +61,43 @@ def corner_rndu(f=None):
       y = Ru(n(log(threshold2)/log(X),200))
       Y = y.exact_rational()
       z = n(X^Y,100)
-      assert z<=threshold2, "z<=threshold2"
-      y1 = y.nextbelow()
-      Y1 = y1.exact_rational()
-      z1 = n(X^Y1,100)
-      assert z1>threshold2, "z1>threshold2"
+      # assert z<=threshold2, "z<=threshold2"
       count += 1
       if threshold1 < z:
          ok += 1
          output(x,y,f)
-         output(x,y1,f)
+         output(x,y.nextbelow(),f)
+      x = x.nextabove()
+      if count % 10000 == 0:
+         print (count, ok, get_hex(x))
+   if f!=None:
+      f.close()
+
+# search K inputs x,y such that x^y rounds to 2^-126 for RNDN
+# but there is underflow
+def corner_rndu(f=None):
+   if f!=None:
+      f = open(f,"w")
+   Ru = RealField(24,rnd='RNDU')
+   Rd = RealField(24,rnd='RNDD')
+   threshold1 = 2^-126-2^-150-2^-151
+   threshold2 = 2^-126-2^-150+2^-151
+   # for threshold1 < x^y < threshold2, x^y rounds to nearest to 2^-126-2^-150
+   # with unbounded exponent range, but to 2^-126 in binary32
+   x = Ru(1/2)
+   count = ok = 0
+   while x<1:
+      X = x.exact_rational()
+      # we want x^y below threshold2
+      y = Ru(n(log(threshold2)/log(X),200))
+      Y = y.exact_rational()
+      z = n(X^Y,100)
+      # assert z<=threshold2, "z<=threshold2"
+      count += 1
+      if threshold1 < z:
+         ok += 1
+         output(x,y,f)
+         output(x,y.nextbelow(),f)
       x = x.nextabove()
       if count % 10000 == 0:
          print (count, ok, get_hex(x))
