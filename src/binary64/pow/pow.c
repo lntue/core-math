@@ -1,6 +1,6 @@
 /* Correctly-rounded power function for two binary64 values.
 
-Copyright (c) 2022, 2023 CERN and Inria
+Copyright (c) 2022-2025 CERN and Inria
 Authors: Tom Hubrecht and Paul Zimmermann
 
 This file is part of the CORE-MATH project
@@ -1780,10 +1780,15 @@ double cr_pow (double x, double y) {
     // restore inexact flag
     set_flag (flag);
 
-  if (__builtin_expect (res_min == res_max, 1))
+  if (__builtin_expect (res_min == res_max, 1)) {
     /* when res_min * ex is in the subnormal range, exp_1() returns NaN
        to avoid double-rounding issues */
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    if (__builtin_fabs (res_max) < 0x1p-1022)
+      errno = ERANGE; // underflow
+#endif
     return res_max;
+  }
   /* the idea of returning res_max instead of res_min is due to Laurent
      Théry: it is better in case of underflow since res_max = +0 always. */
 
@@ -1794,8 +1799,13 @@ double cr_pow (double x, double y) {
   if (y == 2.0) {
     double z = x * x;
 #ifdef CORE_MATH_SUPPORT_ERRNO
-    if (x >= 0x1p512 || x <= -0x1p512)
-      errno = ERANGE;
+    if (__builtin_fabs (x) >= 0x1p512)
+      errno = ERANGE; // overflow
+    /* we have underflow for |x| < 2^-511, since even for RNDU and
+       x = nextbelow(2^-511), x^2 would be rounded to 0x1.fffffffffffffp-1023
+       with unbouded exponent range, which is not representable */
+    if (__builtin_fabs (x) < 0x1p-511 && !exact)
+      errno = ERANGE; // underflow
 #endif
       return z;
   }
@@ -1846,13 +1856,20 @@ double cr_pow (double x, double y) {
 
   /* case R < 2^-1075: underflow case */
   if (R.ex < -1075) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    errno = ERANGE; // underflow
+#endif
     return 0.5 * (s * 0x1p-1074);
   }
 
   if (R.ex < -1022) { /* subnormal case */
     // for x^y = 2^-1022, we can have R < 2^-1022 here
-    if (!exact)
+    if (!exact) {
       feraiseexcept (FE_UNDERFLOW); // raise underflow
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      errno = ERANGE; // underflow
+#endif
+    }
     /* -1075 <= R.ex <= -1023 thus 2^-1075 <= R < 2^-1022 */
     uint64_t ex = -(1022 + R.ex); /* 1 <= ex <= 53 */
     // the significand has to be shifted right by ex bits
@@ -1885,7 +1902,7 @@ double cr_pow (double x, double y) {
        dint_tod() sets errno = ERANGE when R >= 2^1024, which is
        needed for RNDZ and RNDD since we have z = DBL_MAX in this case. */
     if (__builtin_isinf (z))
-      errno = ERANGE;
+      errno = ERANGE; // overflow
 #endif
     return z;
   }

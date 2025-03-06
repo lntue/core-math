@@ -1,6 +1,6 @@
 /* Fast 192-bit arithmetic routines.
 
-Copyright (c) 2023 Paul Zimmermann
+Copyright (c) 2023-2025 Paul Zimmermann
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -206,7 +206,6 @@ rshift (tint_t *a, const tint_t *b, int k)
   }
   else
     a->_h = a->_l = 0;
-  // printf ("exit rshift a="); print_tint (a);
 }
 
 // shift left by k bits (only deal with the significand)
@@ -364,6 +363,10 @@ tint_tod (const tint_t *a, uint64_t err, double y, double x)
     return a->sgn ? -0x1p1023 - 0x1p1023 : 0x1p1023 + 0x1p1023;
   if (a->ex <= -1074) // underflow: |a| < 2^-1074
   {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    if (err != 0)
+      errno = ERANGE; // underflow
+#endif
     if (a->ex < -1074) // |a| < 2^-1075
       return (a->sgn ? -0x1p-1074 : 0x1p-1074) * 0.5;
     // 2^-1075 <= |a| < 2^-1074
@@ -395,6 +398,10 @@ tint_tod (const tint_t *a, uint64_t err, double y, double x)
     hh = hh >> sh;
     low = hh & 0x7ff;
     ex += sh;
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    if (err != 0)
+      errno = ERANGE; // underflow
+#endif
   }
   double h = hh >> 11, l; // significant bits from a->h
   /* If err=0, we are converting a double value, thus low=0, and the

@@ -1,6 +1,6 @@
 /* Correctly-rounded atan2pi function for two binary64 values.
 
-Copyright (c) 2023, 2024 Paul Zimmermann
+Copyright (c) 2023-2025 Paul Zimmermann
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -35,6 +35,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdint.h>
 #include <math.h> // needed to provide atan2pi() since glibc does not have it
+#include <errno.h>
 
 // Warning: clang also defines __GNUC__
 #if defined(__GNUC__) && !defined(__clang__)

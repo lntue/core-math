@@ -117,46 +117,60 @@ static inline double fasttwosum(double x, double y, double *e){
 /* This routine deals with the case where both x and y are subnormal.
    a is the encoding of x, and b is the encoding of y.
    We assume x >= y > 0 thus 2^52 > a >= b > 0. */
-static double __attribute__((noinline)) as_hypot_denorm(u64 a, u64 b, const fexcept_t flag){
-  double op = 1.0 + 0x1p-54, om = 1.0 - 0x1p-54;
+static double __attribute__((noinline)) as_hypot_denorm(u64 a, u64 b){
   double af = (i64)a, bf = (i64)b;
+  int underflow = 0;
   // af and bf are x and y multiplied by 2^1074, thus integers
   a <<= 1;
   b <<= 1;
   u64 rm = __builtin_sqrt(af*af + bf*bf);
-  u64 tm = rm << 1;
-  i64 D = a*a - tm*tm + b*b, sD = D>>63, um = (rm^sD) - sD, drm = sD + 1;
-  // D is the difference between a^2+b^2 and tm^2
-  // sD is the sign bit of D (0 for D >= 0, 1 for D < 0)
-  // um = rm if sD = 0 or rm is even, and rm-2 if sD = 1 and rm is odd
-  // drm = 1 if D >= 0, drm = 2 if D < 0
-  i64 dd = (um<<3) + 4, pD;
-  rm -= drm;
-  drm += sD;
-  do {
-    pD = D;
-    rm += drm;
-    D -= dd;
-    dd += 8;
-  } while(__builtin_expect((D^pD)>0, 0));
-  pD = (sD&D)+(~sD&pD);
-  if(__builtin_expect(pD != 0, 1)){
-    if(__builtin_expect(op == om, 1)){ // rounding to nearest
-      i64 sum = pD - 4*rm - 1;
-      if(__builtin_expect(sum != 0, 1))
-	rm += (sum>>63) + 1;
-      else
-	rm += rm&1;
-    } else { // directed rounding
-      rm += op>1.0; // rounding upwards
-    }
-    if(!(rm>>52)){ // trigger underflow exception _after_ rounding for inexact results
-      volatile double trig_uf = 0x1p-1022;
-      trig_uf *= trig_uf;
-    }
-  } else {
-    set_flags(flag);
+  i64 tm = rm << 1;
+  i64 D = a*a + b*b - tm*tm;
+  // D = a^2+b^2 - tm^2
+  while (D > 2 * tm) { // tm too small
+    D -= 2 * tm + 1;   // (tm+1)^2 = tm^2 + 2*tm + 1
+    tm ++;
   }
+  while (D < 0) {      // tm too large
+    D += 2 * tm - 1;   // (tm-1)^2 = tm^2 - 2*tm + 1
+    tm --;
+  }
+  // tm = floor(sqrt(a^2+b^2)) and 0 <= D = a^2+b^2 - tm^2 < 2*tm+1
+  // if D=0 and tm is even, the result is exact
+  // if D=0 and tm is odd, the result is a midpoint
+  int rb = tm & 1; // round bit for rm
+  int rb2 = D >= tm; // round bit for tm
+  int sb = D != 0; // sticky bit for rm
+  rm = tm >> 1; // truncate the low bit
+  underflow = rm < 0x10000000000000ull;
+  if(__builtin_expect(rb || sb, 1)){
+    double op = 1.0 + 0x1p-54, om = 1.0 - 0x1p-54;
+    if(__builtin_expect(op == om, 1)){ // rounding to nearest
+      if(__builtin_expect(sb, 1)) {
+	rm += rb;
+        // we have no underflow when rm is now 2^52 and rb2 != 0
+        // Remark: we cannot have a^2+b^2 = (tm+1/2)^2 exactly
+        // since this would mean a^2+b^2 = tm^2+tm+1/4,
+        // thus a^2+b^2 would be an odd multiple of 2^-1077
+        // (since ulp(tm) = 2^-1075)
+        if (rm >> 52 && rb2) underflow = 0;
+      }
+      else // sticky bit is 0, round bit is 1: underflow doos not change
+	rm += rm & 1; // even rounding
+    } else if (op > 1.0) { // rounding upwards
+      rm ++;
+      // we have no underflow when rm is now 2^52 and tm was odd
+      if (rm >> 52 && (tm & 1)) underflow = 0;
+    }
+    if(underflow){ // trigger underflow exception _after_ rounding for inexact results
+      volatile double trig_uf = 0x1p-1022;
+      trig_uf *= trig_uf; // triggers underflow
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      errno = ERANGE; // underflow
+#endif
+    }
+  }
+  // else the result is exact, and we have no underflow
   b64u64_u xi = {.u = rm};
   return xi.f;
 }
@@ -262,7 +276,7 @@ double cr_hypot(double x, double y){
     ex = xd.u;
     if(__builtin_expect(!(ex>>52),0)){ // x is subnormal too
       if(!ex) return 0;
-      return as_hypot_denorm(ex,ey,flag);
+      return as_hypot_denorm(ex,ey);
     }
     int nz = __builtin_clzll(ey);
     ey <<= nz-11;
@@ -275,7 +289,8 @@ double cr_hypot(double x, double y){
   if(__builtin_expect(de>(27ll<<52),0)) {
     double r = __builtin_fma(0x1p-27, v, u);
 #ifdef CORE_MATH_SUPPORT_ERRNO
-    if (r > 0x1.fffffffffffffp+1023) errno = ERANGE; // overflow
+    b64u64_u t = {.f = r};
+    if (t.u >= 0x7ff0000000000000ull) errno = ERANGE; // overflow
 #endif
     return r;
   }

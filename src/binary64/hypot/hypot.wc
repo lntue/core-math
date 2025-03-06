@@ -27040,3 +27040,39 @@
 # non-regression tests
 0x1.0226b902291p+52,0x1.000000000252p+52
 0x1.fffffffffffffp+1023,0x1p+998
+# corner-cases in the subnormal range
+# the following x,y pair is such that x is the largest subnormal number,
+# and y is the largest number such that sqrt(x^2+y^2) < 2^-1022
+0x1.fffffffffffffp-1023,0x1.ffffff8p-1049
+# the following x,y pair is such that x is the largest subnormal number,
+# and y is the smallest number such that sqrt(x^2+y^2) >= 2^-1022
+0x1.fffffffffffffp-1023,0x1p-1048
+# the following x,y pair is such that x is the largest subnormal number,
+# and y is the largest number such that sqrt(x^2+y^2) < 2^-1022*(1-2^-54)
+# thus we should get an underflow for rounding to nearest, although the
+# result is 2^-1022
+0x1.fffffffffffffp-1023,0x1.6a09e6p-1049
+# the following x,y pair is such that x is the largest subnormal number,
+# and y is the smallest number such that sqrt(x^2+y^2) >= 2^-1022*(1-2^-54)
+0x1.fffffffffffffp-1023,0x1.6a09e68p-1049
+# further similar corner cases for random subnormal x
+0x1.cef3c37a95a7ep-1023,0x1.b55a307dbeea8p-1024
+0x1.cef3c37a95a7ep-1023,0x1.b55a307dbeeacp-1024
+0x1.ba992dd7ea488p-1024,0x1.cdb43fbfd805ap-1023
+0x1.ba992dd7ea488p-1024,0x1.cdb43fbfd805cp-1023
+0x1.047c60ddacf62p-1023,0x1.b8c8dfc3e1a24p-1023
+0x1.047c60ddacf62p-1023,0x1.b8c8dfc3e1a26p-1023
+0x1.57ef2373b6e74p-1024,0x1.e241a9b586844p-1023
+0x1.57ef2373b6e74p-1024,0x1.e241a9b586846p-1023
+0x1.649c176887398p-1023,0x1.6f632c665225ap-1023
+0x1.649c176887398p-1023,0x1.6f632c665225cp-1023
+0x1.7f39c14a0738p-1024,0x1.dacb0bc6a0166p-1023
+0x1.7f39c14a0738p-1024,0x1.dacb0bc6a0168p-1023
+0x1.5df2e249cf3p-1029,0x1.fff886717a67ap-1023
+0x1.5df2e249cf3p-1029,0x1.fff886717a67cp-1023
+0x1.f3c4af486774cp-1023,0x1.bcfbc90534acp-1025
+0x1.f3c4af486774cp-1023,0x1.bcfbc90534ac8p-1025
+0x1.7b727388ad874p-1023,0x1.57bff220787c6p-1023
+0x1.7b727388ad874p-1023,0x1.57bff220787c8p-1023
+0x1.ee6268cf86ep-1029,0x1.fff114c8921eep-1023
+0x1.ee6268cf86ep-1029,0x1.fff114c8921fp-1023

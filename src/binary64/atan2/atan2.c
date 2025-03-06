@@ -1,6 +1,6 @@
 /* Correctly-rounded atan2 function for two binary64 values.
 
-Copyright (c) 2024 Paul Zimmermann and Alexei Sibidanov
+Copyright (c) 2024-2025 Paul Zimmermann and Alexei Sibidanov
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -31,6 +31,7 @@ SOFTWARE.
 #include <fenv.h>
 #include <stdio.h> // needed in case of correct rounding failure
 #include <stdint.h>
+#include <errno.h>
 
 // Warning: clang also defines __GNUC__
 #if defined(__GNUC__) && !defined(__clang__)
@@ -198,7 +199,7 @@ static double __attribute__((noinline))
 atan2_accurate (double y, double x)
 {
   fexcept_t flag;
-  fegetexceptflag (&flag, FE_UNDERFLOW | FE_OVERFLOW); // save flags
+  fegetexceptflag (&flag, FE_ALL_EXCEPT); // save flags
   int underflow;
   double res;
   /* First check when t=y/x is small and exact and x > 0, since for
@@ -207,35 +208,57 @@ atan2_accurate (double y, double x)
   double t = y / x;
 
   /* If t = y/x did underflow for x > 0, then atan(y/x) will underflow
-     too, since the Taylor expansion of atan(z) is z - z^3/3 + o(z^3) */
-  underflow = x > 0 && fetestexcept (FE_UNDERFLOW);
+     too, since the Taylor expansion of atan(z) is z - z^3/3 + o(z^3).
+     If |t| < 2^-1022 and is exact, then atan(y/x) underflows, and also
+     when |t| = 2^-1022, is exact, and rounding is toward zero. */
+  int inexact = fetestexcept (FE_INEXACT);
+  double u = __builtin_copysign (1.0, y);
+  double v = __builtin_fma (u, -0x1p-54, u);
+  // when rounding toward zero, v != u, otherwise v = u
+  underflow = x > 0 && (fetestexcept (FE_UNDERFLOW) ||
+                        (!inexact &&
+                         (__builtin_fabs (t) < 0x1p-1022 ||
+                          (__builtin_fabs (t) <= 0x1p-1022 && v != u))));
 
   /* If t is exact and underflows, then atan(y/x) rounds to t for x > 0,
      to pi for y > 0 and x < 0, and to -pi for x, y < 0. */
   if (t == 0) {
-    if (x > 0)
+    if (x > 0) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      if (underflow)
+        errno = ERANGE; // underflow
+#endif
       return t;
+    }
     res = (y > 0) ? PI_H + PI_L : -PI_H - PI_L;
     goto end;
   }
-  // FIXME: the computation of corr might raise a spurious underflow
   double corr = __builtin_fma (t, x, -y);
   if (corr == 0 && x > 0) // t is exact
     if (__builtin_fabs (t) <= 0x1.d12ed0af1a27fp-27)
     {
       // Warning: if y is in the subnormal range, t might differ from y/x
-      d64u64 vy = {.f = y};
-      uint64_t ay = vy.u << 1;
       /* If |y| >= 2^-969, then since t*x has at most 106 significant bits,
          and t*x ~ y, the lower bit of t*x is >= 2^-1074, thus there is no
-         underflow in __builtin_fma (t, x, -y). */
-      if (ay >= 0x6c0000000000000ull)
+         underflow in t*x-y. */
+      if (__builtin_fabs (y) >= 0x1p-915) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+        if (underflow)
+          errno = ERANGE; // underflow
+#endif
         return __builtin_fma (t, -0x1p-54, t);
+      }
       /* Now |y| < 2^-969, since x >= 2^-1074, then t <= 2^105, thus we can
          scale y and t by 2^105, which will ensure t*x-y does not underflow. */
       corr = __builtin_fma (t * 0x1p105, x, -y * 0x1p105);
-      if (corr == 0)
-        return __builtin_fma (t, -0x1p-54, t);
+      if (corr == 0) {
+        res = __builtin_fma (t, -0x1p-54, t);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+        if (underflow)
+          errno = ERANGE; // underflow
+#endif
+        return res;
+      }
     }
 
   int inv = __builtin_fabs (y) > __builtin_fabs (x);
@@ -356,7 +379,12 @@ atan2_accurate (double y, double x)
  end:
   if (!underflow)
     fesetexceptflag (&flag, FE_UNDERFLOW); // restore underflow flag
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  else
+    errno = ERANGE; // underflow
+#endif
   fesetexceptflag (&flag, FE_OVERFLOW); // restore overflow flag
+  feraiseexcept (FE_INEXACT); // always inexact
   return res;
 }
 
@@ -545,9 +573,8 @@ double cr_atan2 (double y0, double x0){
     fh = fastsum(fh,fl,zh,zl,&fl);
     lb = fh + (fl - eps);
     ub = fh + (fl + eps);
-    if(lb!=ub){
+    if(lb!=ub)
       return atan2_accurate(y0,x0);
-    }
   }
   return ub;
 }
