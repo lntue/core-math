@@ -227,9 +227,9 @@ check (testcase ts)
   /* Note: the test z1 != z2 would not distinguish +0 and -0. */
   if (is_equal (z1, z2) == 0) {
 #ifndef EXCHANGE_X_Y
-    printf("FAIL x=");
+    printf("FAIL x,y=");
     print_binary64 (ts.x);
-    printf (" y=");
+    printf (",");
     print_binary64 (ts.y);
     printf (" ref=");
     print_binary64 (z1);
@@ -237,9 +237,9 @@ check (testcase ts)
     print_binary64 (z2);
     printf ("\n");
 #else
-    printf("FAIL y=");
+    printf("FAIL y,x=");
     print_binary64 (ts.x);
-    printf (" x=");
+    printf (",");
     print_binary64 (ts.y);
     printf (" ref=");
     print_binary64 (z1);

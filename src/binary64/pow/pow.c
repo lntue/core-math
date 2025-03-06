@@ -1257,9 +1257,10 @@ static void exp_3 (qint64_t *r, qint64_t *x) {
   Can return 1 only when (x,y) are in the set S from [4]:
   (a) either y is an integer, 2 <= y <= 34, or
   (b) x=2^E*m with m odd and y = 2^F*n with -5 <= F < 0, n odd, 3 <= n <= 34
+  exact is non-zero iff x^y is exactly representable in binary64.
 */
 static char
-exact_pow (double *r, double x, double y, const dint64_t *z)
+exact_pow (double *r, double x, double y, const dint64_t *z, int exact)
 {
   int64_t _s = z->sgn ? -1 : 1;
 
@@ -1280,7 +1281,6 @@ exact_pow (double *r, double x, double y, const dint64_t *z)
       if (g >= 1024)
         errno = ERANGE;
 #endif
-
       return 1;
     }
     return 0;
@@ -1332,8 +1332,7 @@ exact_pow (double *r, double x, double y, const dint64_t *z)
     if (((k & ~(~1ull << (g - G))) == (1ull << (g - G)))) {
       *r = (double)((k >> (g - G)) * _s);
       pow2(r, g);
-
-      return 1;
+      goto end;
     }
     return 0;
   }
@@ -1365,6 +1364,12 @@ exact_pow (double *r, double x, double y, const dint64_t *z)
   *r = (double)(k * _s);
   int64_t G = E * (n << F);
   pow2(r, G);
+
+ end:
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  if (!exact && __builtin_fabs (*r) < 0x1p-1022)
+    errno = ERANGE; // underflow
+#endif
 
   return 1;
 }
@@ -1864,16 +1869,16 @@ double cr_pow (double x, double y) {
 
   if (R.ex < -1022) { /* subnormal case */
     // for x^y = 2^-1022, we can have R < 2^-1022 here
-    if (!exact) {
-      feraiseexcept (FE_UNDERFLOW); // raise underflow
-#ifdef CORE_MATH_SUPPORT_ERRNO
-      errno = ERANGE; // underflow
-#endif
-    }
+
     /* -1075 <= R.ex <= -1023 thus 2^-1075 <= R < 2^-1022 */
     uint64_t ex = -(1022 + R.ex); /* 1 <= ex <= 53 */
     // the significand has to be shifted right by ex bits
     uint64_t m = R.lo >> (10 + ex) | R.hi << (54 - ex);
+
+    /* We always have underflow when ex >= 2. However for ex=1,
+       where 2^-1023 <= R < 2^-1022, we might not have underflow
+       for rounding up if R >= 2^-1022 - 2^-1075, and for rounding
+       to nearest for R >= 2^-1022 - 2^-1076. */
 
     /* In principle, the bound 28 which holds for the normal case below
        should be replaced by ceil(28/2^ex) since the relative error bound
@@ -1895,23 +1900,15 @@ double cr_pow (double x, double y) {
 
   R.sgn = s == -1.0;
 
-  if (rd) {
-    double z = dint_tod (&R);
-#ifdef CORE_MATH_SUPPORT_ERRNO
-    /* FIXME: this partially duplicates what is done in dint_tod():
-       dint_tod() sets errno = ERANGE when R >= 2^1024, which is
-       needed for RNDZ and RNDD since we have z = DBL_MAX in this case. */
-    if (__builtin_isinf (z))
-      errno = ERANGE; // overflow
-#endif
-    return z;
-  }
+  if (rd)
+    // dint_tod should deal with underflow/overflow/errno issues
+    return dint_tod (&R, exact);
 
 #if ENABLE_EXACT > 0
   // Detect rounding boundary cases
   double e;
 
-  if (exact_pow (&e, x, y, &R))
+  if (exact_pow (&e, x, y, &R, exact))
     return e;
 #endif /* ENABLE_EXACT */
 #endif /* ENABLE_ZIV2 */

@@ -636,3 +636,54 @@ def check_pow2(out=None):
             print_xy(out,1/x,-y)
    if out != None:
       out.close()
+
+# search K inputs x,y such that x^y rounds to 2^-1022 for RNDU
+# but there is underflow
+def corner_rndu(K):
+   Ru = RealField(53,rnd='RNDU')
+   Rd = RealField(53,rnd='RNDD')
+   threshold1 = 2^-1022-2^-1074 # nextbelow(2^-1022) in binary64
+   threshold2 = 2^-1022-2^-1075 # nextbelow(2^-1022) with unbounded exponent
+   # we should have threshold1 < x^y <= threshold2
+   while K>0:
+      x = Ru.random_element(0,1)
+      X = x.exact_rational()
+      # we want x^y below threshold2
+      y = Ru(n(log(threshold2)/log(X),200))
+      Y = y.exact_rational()
+      z = n(X^Y,200)
+      assert z<=threshold2, "z<=threshold2"
+      y1 = y.nextbelow()
+      Y1 = y1.exact_rational()
+      z1 = n(X^Y1,200)
+      assert z1>threshold2, "z1>threshold2"
+      if threshold1 < z:
+         print (get_hex(x)+","+get_hex(y))
+         print (get_hex(x)+","+get_hex(y1))
+         K -= 1
+
+# search K inputs x,y such that x^y rounds to 2^-1022 for RNDN
+# but there is underflow
+def corner_rndn(K):
+   Ru = RealField(53,rnd='RNDU')
+   Rd = RealField(53,rnd='RNDD')
+   threshold1 = 2^-1022-2^-1075-2^-1076
+   threshold2 = 2^-1022-2^-1075+2^-1076
+   # for threshold1 < x^y < threshold2, x^y rounds to 2^-1022-2^-1075 with
+   # unbounded exponent range
+   while K>0:
+      x = Ru.random_element(0,1)
+      X = x.exact_rational()
+      # we want x^y below threshold2
+      y = Ru(n(log(threshold2)/log(X),200))
+      Y = y.exact_rational()
+      z = n(X^Y,200)
+      assert z<=threshold2, "z<=threshold2"
+      y1 = y.nextbelow()
+      Y1 = y1.exact_rational()
+      z1 = n(X^Y1,200)
+      assert z1>threshold2, "z1>threshold2"
+      if threshold1 < z:
+         print (get_hex(x)+","+get_hex(y))
+         print (get_hex(x)+","+get_hex(y1))
+         K -= 1

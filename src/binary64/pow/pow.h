@@ -1,6 +1,6 @@
 /* Correctly-rounded power function for two binary64 values.
 
-Copyright (c) 2022, 2023 CERN and Inria
+Copyright (c) 2022-2025 CERN and Inria
 Authors: Tom Hubrecht and Paul Zimmermann
 
 This file is part of the CORE-MATH project
@@ -221,7 +221,10 @@ static inline int64_t dint_toi(const dint64_t *a) {
 }
 
 // round a, assuming a is in the subnormal range
-static inline double dint_tod_subnormal(dint64_t *a) {
+// exact is non-zero iff x^y is exact
+static inline double dint_tod_subnormal(dint64_t *a, int exact) {
+  int underflow = 1;
+  double ret = 0;
 
   uint64_t ex = -(1011 + a->ex); // ex >= 12
   // we have to shift right hi,lo by ex bits so that the least significant
@@ -230,22 +233,25 @@ static inline double dint_tod_subnormal(dint64_t *a) {
 
   uint64_t rb, sb;
 
-  if (ex >= 64) // all bits disappear: |a| < 2^-1074
+  if (ex >= 64) { // all bits disappear: |a| < 2^-1074
     switch (fegetround()) {
-      double ret;
     case FE_TONEAREST:
       rb = (a->hi >> 63);        // only used when e=64
       sb = (a->hi << 1) | a->lo; // idem
       ret = (ex > 64 || rb == 0 || sb == 0) ? +0.0 : 0x1p-1074;
-      return (a->sgn) ? -ret : ret;
+      ret = (a->sgn) ? -ret : ret;
       break;
     case FE_DOWNWARD:
-      return (a->sgn) ? -0x1p-1074 : +0.0;
+      ret = (a->sgn) ? -0x1p-1074 : +0.0;
+      break;
     case FE_UPWARD:
-      return (!a->sgn) ? 0x1p-1074 : -0.0;
+      ret = (!a->sgn) ? 0x1p-1074 : -0.0;
+      break;
     case FE_TOWARDZERO:
-      return (a->sgn) ? -0.0 : +0.0;
+      ret = (a->sgn) ? -0.0 : +0.0;
     }
+    goto end;
+  }
 
   // now ex < 64
   uint64_t hi;
@@ -255,13 +261,24 @@ static inline double dint_tod_subnormal(dint64_t *a) {
 
   switch (fegetround()) {
   case FE_TONEAREST:
+    // if ex=12 there is no underflow when hi rounds to 2^52 and rb=1
+    // and the next bit is 1 too
     hi += sb ? rb : hi & rb;
+    if (ex == 12 && (hi >> 52) && rb)
+    {
+      uint64_t rbb = (a->hi >> (ex - 2)) & 0x1; // next bit after the round bit
+      if (rbb)
+        underflow = 0;
+    }
     break;
   case FE_DOWNWARD:
     hi += a->sgn & (sb | rb);
     break;
   case FE_UPWARD:
+    // if ex=12 there is no underflow when hi rounds to 2^52 and rb=1
     hi += (!a->sgn) & (sb | rb);
+    if (ex == 12 && (hi >> 52) && rb)
+      underflow = 0;
     break;
   // for rounding towards zero, don't do anything
   }
@@ -271,16 +288,29 @@ static inline double dint_tod_subnormal(dint64_t *a) {
 
   f64_u v = {.u = hi};
   v.u |= a->sgn << 63;
-  return v.f;
+  ret = v.f;
+
+ end:
+  if (underflow && !exact) {
+    feraiseexcept (FE_UNDERFLOW); // raise underflow
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    errno = ERANGE; // underflow
+#endif
+  }
+
+  return ret;
 }
 
 // Convert a dint64_t value to a double
-static inline double dint_tod(dint64_t *a) {
+// exact is non-zero iff x^y is exact
+static inline double dint_tod(dint64_t *a, int exact) {
   if (__builtin_expect (a->ex < -1022, 0))
-    return dint_tod_subnormal (a);
+    return dint_tod_subnormal (a, exact);
 
+  // r is the significant in [1,2)
   f64_u r = {.u = (a->hi >> 11) | (0x3ffll << 52)};
 
+  // round r
   double rd = 0.0;
   if ((a->hi >> 10) & 0x1)
     rd += 0x1p-53;
@@ -311,7 +341,13 @@ static inline double dint_tod(dint64_t *a) {
     }
     else
       e.u = ((a->ex + 1023) & 0x7ff) << 52;
-  } else {
+  } else { // subnormal case
+    if (!exact) {
+      feraiseexcept (FE_UNDERFLOW); // raise underflow
+#ifdef CORE_MATH_SUPPORT_ERRNO
+      errno = ERANGE; // underflow
+#endif
+    }
     if (a->ex < -1074) {
       if (a->ex == -1075) {
         r.f = r.f * 0x1p-1;
@@ -324,6 +360,11 @@ static inline double dint_tod(dint64_t *a) {
       e.u = 1ll << (a->ex + 1074);
     }
   }
+
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  if (r.f == 0x1p+1 && e.f == 0x1p+1023)
+    errno = ERANGE; // overflow
+#endif
 
   return r.f * e.f;
 }
@@ -420,7 +461,11 @@ static inline double qint_tod(qint64_t *a) {
       }
     else
       e.u = ((a->ex + 1023) & 0x7ff) << 52;
-  } else {
+  } else { // subnormal case
+    feraiseexcept (FE_UNDERFLOW); // raise underflow
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    errno = ERANGE; // underflow
+#endif
     if (a->ex < -1074) {
       if (a->ex == -1075) {
         r.f = r.f * 0x1p-1;
