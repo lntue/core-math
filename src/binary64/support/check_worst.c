@@ -157,7 +157,7 @@ is_equal (double x, double y)
   return asuint64 (x) == asuint64 (y);
 }
 
-int tests = 0;
+int tests = 0, failures = 0;
 
 // prints snan/qnan when x is NaN
 static void
@@ -248,6 +248,10 @@ check (testcase ts)
     printf ("\n");
 #endif
     fflush(stdout);
+#if (defined(_OPENMP) && !defined(CORE_MATH_NO_OPENMP))
+#pragma omp atomic update
+#endif
+    failures ++;
 #ifndef DO_NOT_ABORT
     exit(1);
 #endif
@@ -433,7 +437,7 @@ doloop(void)
   }
 
   free(items);
-  printf("%d tests passed\n", tests);
+  printf("%d tests passed, %d failure(s)\n", tests, failures);
 }
 
 static inline double

@@ -371,7 +371,7 @@ doloop(void)
   }
 
   free(items);
-  printf("%d tests, %d failure(s)\n", tests, failures);
+  printf("%d tests passed, %d failure(s)\n", tests, failures);
 }
 
 // When x is a NaN, returns 1 if x is an sNaN and 0 if it is a qNaN
