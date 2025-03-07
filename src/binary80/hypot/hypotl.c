@@ -245,10 +245,13 @@ cr_hypotl (long double x, long double y)
   // use sqrtl to compute a 64-bit approximation of sqrt(hh)
   b80u80_t z;
   int high = hh >> 127;
-  z.m = hh >> (63 + high);
-  z.e = 1024 + 125 + high;
-  z.f = __builtin_sqrtl(z.f);
+  z.m = hh >> (63 + high); // upper 64 bits from hh
+  z.e = 16509 + high;      // ensure 2^126 <= z < 2^128
+  z.f = __builtin_sqrtl (z.f);
   u128 th = z.m;
+
+  /* For RNDU, it can be that z.f rounds to 2^64. */
+  x_exp += z.e - 16446;
 
   /* sqrt(x^2+y^2) ~ th * 2^(x_exp - 63) with 2^63 <= th < 2^64
      thus 2^x_exp <= sqrt(x^2+y^2) < 2^(x_exp + 1)
@@ -263,7 +266,7 @@ cr_hypotl (long double x, long double y)
     hh = hh >> (2 * k);
     x_exp += k - 1; // -1 due to exponent shift for subnormals
   }
-  
+
   // compute r = hh - th^2
   u128 r = hh - th * th;
   if ((r >> 127) != 0) // th too large
@@ -279,6 +282,7 @@ cr_hypotl (long double x, long double y)
     r -= 2 * th + 1;
     th ++;
   }
+  // invariant: r = hh - th^2
 
   int exact = 0;
   if (__builtin_expect (r == 0 && ll == 0, 0)) // exact case
@@ -292,17 +296,35 @@ cr_hypotl (long double x, long double y)
 
   /* In the midpoint case, we have hh + ll = (th+1/2)^2 thus
      r = th and ll = 2^126. */
-  u128 thres = (u128) 1 << 126;
+  const u128 thres = (u128) 1 << 126;
   if (r > th || (r == th && (ll > thres || (ll == thres && (th & 1)))))
     // for RNDN we should round upward
     eps = 0x1.8p-53;
 
   b80u80_t res = {.m = th, .e = x_exp + 0x3fff};
-  if (!exact && 1.0 + eps > 1.0)
-  {
+  int underflow = res.e == 0;
+  if (!exact && 1.0 + eps > 1.0) {
     /* 1.0 + eps rounds to nextabove(1) either for RNDU (whatever the value
        of eps) and for RNDN when eps = 0x1.8p-53 */
     res.m ++;
+    /* when res.e = 0 (subnormal) and m becomes 2^63 (normal) this is exactly
+       what we want, but then we have no underflow for RNDU when
+       hypot(x,y) >= (th+1/2)^2, which corresponds to r = th and ll = 2^126,
+       and for RNDN when hypot(x,y) >= (th+3/4)^2, which corresponds to
+       r = 0xbfffffffffffffff and ll = 2^112. */
+    if (__builtin_expect (res.e == 0 && th == 0x7fffffffffffffffull, 0)) {
+      if (1.0 + 0x1p-53 == 1.0) { // to nearest
+        const u128 thres_r = 0xbfffffffffffffffull;
+        const u128 thres_ll = (u128) 1 << 112;
+        if (r > thres_r || (r == thres_r && ll >= thres_ll))
+          underflow = 0;
+      }
+      if (1.0 + 0x1p-53 > 1.0) // RNDU
+        /* to r = th and ll = 2^126 is exactly the same threshold than for
+           rounding upwards for RNDN, since we know th is odd */
+        if (eps == 0x1.8p-53)
+          underflow = 0;
+    }
     if (res.m == 0) // change of binade
     {
       res.e ++;
@@ -310,7 +332,7 @@ cr_hypotl (long double x, long double y)
     }
   }
 
-  if (res.e == 0 && !exact) {
+  if (underflow && !exact) {
     feraiseexcept (FE_UNDERFLOW);
 #ifdef CORE_MATH_SUPPORT_ERRNO
     errno = ERANGE; // underflow
