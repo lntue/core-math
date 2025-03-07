@@ -26,11 +26,11 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <errno.h>
+#include <fenv.h>
 #ifdef __x86_64__
 #include <x86intrin.h>
 #define FLAG_T uint32_t
 #else
-#include <fenv.h>
 #define FLAG_T fexcept_t
 #endif
 
@@ -517,9 +517,16 @@ float cr_powf(float x0, float y0){
      zero, we have overflow for x^y >= 2^128, but res = MAX_FLT.
      It is also not enough to check if rr >= 2^128, since for rounding upwards,
      we have overflow for MAX_DBL < rr < 2^128. */
+  // For RNDN, we have underflow when |x^y| < 2^-126*(1-2^-25)
+  // FOR RNDZ/RNDD, we have underflow when |x^y| < 2^-126
+  // For RNDU, we have underflow when |x^y| < 2^-126*(1-2^-24)
+  double thres = (fegetround () == FE_TONEAREST) ? 0x1.ffffffp-127
+    : (fegetround () == FE_UPWARD) ? 0x1.fffffep-127
+    : 0x1p-126;
   if (is_inf (res) || __builtin_fabs (rr.f) >= 0x1p128 ||
-      __builtin_fabs (rr.f) < 0x1p-126)
+      __builtin_fabs (rr.f) < thres) {
     errno = ERANGE; // overflow or underflow
+  }
 #endif
   return res;
 }
