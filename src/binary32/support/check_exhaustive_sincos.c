@@ -155,7 +155,6 @@ doit (uint32_t n)
   errno = 0;
 #endif
   cr_function_under_test (x, &z1, &z2);
-  int inex_z = fetestexcept (FE_INEXACT);
   if (!is_equal (y1, z1) || !is_equal (y2, z2))
   {
     printf ("FAIL x=%a ref=(%a,%a) z=(%a,%a)\n", x, y1, y2, z1, z2);
@@ -165,6 +164,7 @@ doit (uint32_t n)
 
   // check inexact flag
 #ifdef CORE_MATH_CHECK_INEXACT
+  int inex_z = fetestexcept (FE_INEXACT);
   if ((inex_y == 0) && (inex_z != 0))
   {
     printf ("Spurious inexact exception for x=%a z=(%a,%a)\n", x, z1, z2);

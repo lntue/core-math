@@ -26,6 +26,7 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <errno.h>
+#include <fenv.h>
 #if defined(__x86_64__)
 #include <x86intrin.h>
 #endif
