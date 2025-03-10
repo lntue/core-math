@@ -57062,3 +57062,6 @@
 0x1.ffffffffffffdp+45
 0x1.ffffffffffffep+45
 0x1.fffffffffffffp+45
+# threshold values
+0x1.45f306dc9c882p-1024
+0x1.45f306dc9c883p-1024

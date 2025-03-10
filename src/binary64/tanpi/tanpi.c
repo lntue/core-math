@@ -199,7 +199,7 @@ double cr_tanpi(double x){
   if(__builtin_expect(ax >= ((uint64_t)0x3f3<<52), 1)) { // |x| >= 0x1p-12
     if(__builtin_expect(ax >= ((uint64_t)0x42d<<52), 0)) { // |x| >= 0x1p+46
       if(__builtin_expect(ax >= ((uint64_t)0x7ff<<52), 0)) { // NaN, Inf
-	if(__builtin_expect(ax > ((uint64_t)0x7ff<<52), 0)) return x; // NaN
+	if(__builtin_expect(ax > ((uint64_t)0x7ff<<52), 0)) return x + x; // NaN
 #ifdef CORE_MATH_SUPPORT_ERRNO
 	errno = EDOM;
 #endif
@@ -212,6 +212,9 @@ double cr_tanpi(double x){
       if(!(iq&31)){
 	int64_t jq = iq>>5;
 	if(jq&1){
+#ifdef CORE_MATH_SUPPORT_ERRNO
+          errno = ERANGE; // overflow
+#endif
 	  if(jq&2)
 	    return -1.0/0.0;
 	  else
@@ -251,6 +254,9 @@ double cr_tanpi(double x){
 	if(!(iq&31)){
 	  int64_t jq = sm>>(s+6);
 	  if(jq&1){
+#ifdef CORE_MATH_SUPPORT_ERRNO
+            errno = ERANGE; // overflow
+#endif
 	    if(jq&2)
 	      return -1.0/0.0;
 	    else
@@ -339,6 +345,13 @@ double cr_tanpi(double x){
 	th = mulddd(pi0, pi1, z, &tl);
 	res = th * isc.f;
 	if(__builtin_fabs(res)<0x1p-1022){
+#ifdef CORE_MATH_SUPPORT_ERRNO
+          /* For all rounding modes, we have underflow after rounding for
+             |x| <= 0x1.45f306dc9c882p-1024. */
+          errno = ERANGE; // underflow
+#endif
+          // we force underflow since the code below might be exact
+          volatile double __attribute__((unused)) dummy = x * x;
 	  double o = __builtin_copysign(0x1p-1022, x);
 	  double v0b = (o + res)*sc.f, v0h = res*sc.f;
 	  tl += th - v0h;
