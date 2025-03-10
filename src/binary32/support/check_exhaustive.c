@@ -1,7 +1,6 @@
 /* Check correctness of univariate binary32 function by exhaustive search.
 
-Copyright (c) 2022 Alexei Sibidanov.
-Copyright (c) 2022 Paul Zimmermann, INRIA.
+Copyright (c) 2022-2025 Alexei Sibidanov and Paul Zimmermann
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -101,14 +100,40 @@ is_equal (float y1, float y2)
   return asuint (y1) == asuint (y2);
 }
 
+int underflow_before; // non-zero if processor raises underflow before rounding
+
+// return non-zero if the processor raises underflow before rounding
+// (e.g., aarch64)
+static void
+check_underflow_before (void)
+{
+  fexcept_t flag;
+  fegetexceptflag (&flag, FE_ALL_EXCEPT); // save flags
+  fesetround (FE_TONEAREST);
+  feclearexcept (FE_UNDERFLOW);
+  float x = 0x1p-126f;
+  float y = __builtin_fmaf (-x, x, x);
+  if (x == y) // this is needed otherwise the compiler says y is unused
+    underflow_before = fetestexcept (FE_UNDERFLOW);
+  fesetexceptflag (&flag, FE_ALL_EXCEPT); //restore flags
+}
+
 /* For |y| = 2^-126 and underflow after rounding, clear the MPFR
    underflow exception when the rounded result (with unbounded exponent)
-   equals +/-2^-126 (might be set due to a bug in MPFR <= 4.2.1). */
+   equals +/-2^-126 (might be set due to a bug in MPFR <= 4.2.1).
+   For |y| = 2^-126 and underflow before rounding, clear the fenv.h
+   underflow exception when |f(x)| < 2^-126 but there is no underflow
+   after rounding (thus we mimic underflow after rounding). */
 static void
 fix_underflow (float x, float y)
 {
   if (__builtin_fabsf (y) != 0x1p-126f)
     return;
+  if (underflow_before) {
+    if (mpfr_flags_test (MPFR_FLAGS_UNDERFLOW) == 0)
+      feclearexcept (FE_UNDERFLOW);
+    return;
+  }
   mpfr_t t;
   mpfr_init2 (t, 24);
   fexcept_t flag;
@@ -414,6 +439,8 @@ main (int argc, char *argv[])
           exit (1);
         }
     }
+
+  check_underflow_before ();
 
   return doloop();
 }
