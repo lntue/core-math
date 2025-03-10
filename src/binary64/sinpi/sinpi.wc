@@ -56442,3 +56442,11 @@
 -1
 +0x1.fffffffffffffp+1023
 -0x1.fffffffffffffp+1023
+# threshold values
+0x1.45f306dc9c882p-1024
+0x1.45f306dc9c883p-1024
+0x1.8p+0
+0x1.4p+1
+0x1.cp+1
+0x1.fffffffffffffp+51
+0x1.ffffffffffffdp+51

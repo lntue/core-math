@@ -1,6 +1,6 @@
 /* Correctly-rounded sine of binary64 value for angles in half-revolutions
 
-Copyright (c) 2023 Alexei Sibidanov.
+Copyright (c) 2023-2025 Alexei Sibidanov.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -158,8 +158,9 @@ double cr_sinpi(double x){
   uint64_t ax = ix.u&(~(uint64_t)0>>1);
   if(__builtin_expect(ax==0, 0)) return x;
   int32_t e = ax>>52;
-  int64_t m = (ix.u&(~(uint64_t)0>>12))|((uint64_t)1<<52), sgn = ix.u; sgn >>= 63;
-  m = (m^sgn) - sgn;
+  uint64_t m0 = (ix.u&(~(uint64_t)0>>12))|((uint64_t)1<<52);
+  int64_t sgn = ix.u; sgn >>= 63;
+  int64_t m = ((int64_t)m0^sgn) - sgn;
   int32_t s = 1063 - e;
   if(__builtin_expect(s<0, 0)){
     if(__builtin_expect(e == 0x7ff, 0)){
@@ -170,7 +171,7 @@ double cr_sinpi(double x){
 	feraiseexcept (FE_INVALID);
 	return __builtin_nan("inf");
       }
-      return x;
+      return x + x; // case x=NaN
     }
     s = -s - 1;
     if(s>10) return __builtin_copysign(0.0, x);
@@ -180,18 +181,28 @@ double cr_sinpi(double x){
     return sh + sl;
   }
 
-  if(__builtin_expect(ax<=0x3fa2000000000000ull, 0)){ // = 0x1.2p-5 = 3.515625e-02
+  if(__builtin_expect(ax<=0x3fa2000000000000ull, 0)){ // |x| <= 0x1.2p-5
     double ph = 0x1.921fb54442d18p+1, pl = 0x1.1a62633145c07p-53;
-    double zh = ph*x, zl = __builtin_fma(ph, x, -zh) + pl*x;
+    double zh, zl;
     if(__builtin_expect(__builtin_fabs(x)<0x1p-54, 0)){
       if(__builtin_expect(__builtin_fabs(x)<0x1p-970, 0)){
+#ifdef CORE_MATH_SUPPORT_ERRNO
+          /* For all rounding modes, we have underflow (before or after
+             rounding) for |x| <= 0x1.45f306dc9c882p-1024. */
+        if (__builtin_fabs(x) <= 0x1.45f306dc9c882p-1024)
+          errno = ERANGE; // underflow
+#endif
 	double t = x*0x1p106;
 	zh = ph*t; zl = __builtin_fma(ph, t, -zh) + pl*t;
 	double r = zh + zl, rs = r*0x1p-106, rt = rs*0x1p106;
 	return __builtin_fma((zh - rt) + zl, 0x1p-106, rs);
       }
+      zh = ph*x;
+      zl = __builtin_fma(ph, x, -zh) + pl*x;
       return zh + zl;
     }
+    zh = ph*x;
+    zl = __builtin_fma(ph, x, -zh) + pl*x;
     double x2 = x*x, x3 = x2*x, x4 = x2*x2;
     double eps = x*(x2*0x1p-47 + 0x1p-102);
     static const double c[] = {-0x1.4abbce625be51p+2, 0x1.466bc67754b46p+1, -0x1.32d2cc12a51f4p-1, 0x1.5060540058476p-4};
@@ -202,7 +213,14 @@ double cr_sinpi(double x){
   }
   
   int32_t si = e-1011;
-  if(__builtin_expect(si>=0&&(m<<si)==0, 0)) return __builtin_copysign(0.0, x);
+  if (__builtin_expect(si>=0&&(m0<<(si+1))==0, 0)) {
+    // x is integer or half-integer
+    if ((m0<<si) == 0)
+      return __builtin_copysign(0.0, x); // x is integer
+    int t = (m0<<(si-1))>>63;
+    // t = 0 if |x| = 1/2 mod 2, t = 1 if |x| = 3/2 mod 2
+    return (t == 0) ? __builtin_copysign(1.0, x) : -__builtin_copysign(1.0, x);
+  }
 
   uint64_t iq = (m>>s)&8191;
   iq = (iq + 1)>>1;

@@ -346,8 +346,8 @@ double cr_tanpi(double x){
 	res = th * isc.f;
 	if(__builtin_fabs(res)<0x1p-1022){
 #ifdef CORE_MATH_SUPPORT_ERRNO
-          /* For all rounding modes, we have underflow after rounding for
-             |x| <= 0x1.45f306dc9c882p-1024. */
+          /* For all rounding modes, we have underflow (before or after
+             rounding) for |x| <= 0x1.45f306dc9c882p-1024. */
           errno = ERANGE; // underflow
 #endif
           // we force underflow since the code below might be exact
