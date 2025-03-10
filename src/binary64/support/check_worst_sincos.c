@@ -27,6 +27,7 @@ SOFTWARE.
 #define _POSIX_C_SOURCE 200809L  /* for getline */
 
 #include <sys/types.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -394,23 +395,23 @@ check_signaling_nan (void)
   // check that foo(NaN) = NaN
   if (!is_nan (s))
   {
-    fprintf (stderr, "Error, foo(sNaN) should be NaN, got s=%la=%llx\n", s, asuint64 (s));
+    fprintf (stderr, "Error, foo(sNaN) should be NaN, got s=%la=%"PRIx64"\n", s, asuint64 (s));
     exit (1);
   }
   if (!is_nan (c))
   {
-    fprintf (stderr, "Error, foo(sNaN) should be NaN, got c=%la=%llx\n", c, asuint64 (c));
+    fprintf (stderr, "Error, foo(sNaN) should be NaN, got c=%la=%"PRIx64"\n", c, asuint64 (c));
     exit (1);
   }
   // check that the signaling bit disappeared
   if (issignaling (s))
   {
-    fprintf (stderr, "Error, foo(sNaN) should be qNaN, got s=sNaN=%llx\n", asuint64 (s));
+    fprintf (stderr, "Error, foo(sNaN) should be qNaN, got s=sNaN=%"PRIx64"\n", asuint64 (s));
     exit (1);
   }
   if (issignaling (c))
   {
-    fprintf (stderr, "Error, foo(sNaN) should be qNaN, got c=sNaN=%llx\n", asuint64 (c));
+    fprintf (stderr, "Error, foo(sNaN) should be qNaN, got c=sNaN=%"PRIx64"\n", asuint64 (c));
     exit (1);
   }
   // check also sNaN with the sign bit set
@@ -419,23 +420,23 @@ check_signaling_nan (void)
   // check that foo(NaN) = NaN
   if (!is_nan (s))
   {
-    fprintf (stderr, "Error, foo(sNaN) should be NaN, got s=%la=%llx\n", s, asuint64 (s));
+    fprintf (stderr, "Error, foo(sNaN) should be NaN, got s=%la=%"PRIx64"\n", s, asuint64 (s));
     exit (1);
   }
   if (!is_nan (c))
   {
-    fprintf (stderr, "Error, foo(sNaN) should be NaN, got c=%la=%llx\n", c, asuint64 (c));
+    fprintf (stderr, "Error, foo(sNaN) should be NaN, got c=%la=%"PRIx64"\n", c, asuint64 (c));
     exit (1);
   }
   // check that the signaling bit disappeared
   if (issignaling (s))
   {
-    fprintf (stderr, "Error, foo(sNaN) should be qNaN, got s=sNaN=%llx\n", asuint64 (s));
+    fprintf (stderr, "Error, foo(sNaN) should be qNaN, got s=sNaN=%"PRIx64"\n", asuint64 (s));
     exit (1);
   }
   if (issignaling (c))
   {
-    fprintf (stderr, "Error, foo(sNaN) should be qNaN, got c=sNaN=%llx\n", asuint64 (c));
+    fprintf (stderr, "Error, foo(sNaN) should be qNaN, got c=sNaN=%"PRIx64"\n", asuint64 (c));
     exit (1);
   }
 }
