@@ -232,19 +232,24 @@ double cr_tanpi(double x){
 	return nh+nl;
       }
     }
-    // now 0x1p-12 <= |x| < 0x1p+46
+    // now 0x1p-12 <= |x| < 0x1p+46, we have 1011 <= e <= 1068
     int32_t e = ax>>52, s = 1068 - e, s1 = e - 1011;
     int64_t m = (ax&(~(uint64_t)0>>12))|((uint64_t)1<<52), ms = (m<<s1)>>63, sgn = (int64_t)ix.u>>63;
+    // m is the significand, 2^52 <= m < 2^53
+    // 0 <= s1 <= 57 is a biased exponent, with s1=0 for 2^-12 <= |x| < 2^-11
+    // 0 <= s <= 57 is another biased exponent, with s=0 for 2^45 <= |x| < 2^46
+    // ms is the bit of weight 1/2 in x
     uint64_t iq = ((m^ms)>>s)&63;
     iq = (iq + 1)>>1;
     ms ^= sgn;
-    m = (m ^ sgn) - sgn;
-    int64_t k = m<<(e-1005);
+    int64_t sm = (m ^ sgn) - sgn; // sm = sign(x)*m
+    int64_t k = sm<<(e-1005); // 6 <= e-1005 <= 63
+    // k contains the bits of m of weight <= 2^-7
     double z = k;
-    if(__builtin_expect((k<<1)==0,0)) {
-      if(__builtin_expect(k==0, 0)){
+    if(__builtin_expect((k<<1)==0,0)) { // x mod 2^-8 = 0
+      if(__builtin_expect(k==0, 0)){ // x mod 2^-7 = 0
 	if(!(iq&31)){
-	  int64_t jq = m>>(s+6);
+	  int64_t jq = sm>>(s+6);
 	  if(jq&1){
 	    if(jq&2)
 	      return -1.0/0.0;
@@ -257,9 +262,13 @@ double cr_tanpi(double x){
 	      return 0.0;
 	  }
 	}
+        // avoid spurious inexact exception for x=1/4 mod 1/2
+        uint64_t kq = ((uint64_t) m<<s1)>>58;
+        if (kq == 0x10) // |x| = 1/4 mod 1
+          return __builtin_copysign(1,x);
+        if (kq == 0x30) // |x| = 3/4 mod 1
+          return -__builtin_copysign(1,x);
       }
-      // avoid spurious inexact exception for x=1/4
-      if (ax == 0x3fd0000000000000ull) return __builtin_copysign(1,x);
       z = __builtin_copysign(1,x)*z;
     }
     double z2 = z*z, z4 = z2*z2, z3 = z*z2, f = z3*((c[0] + z2*c[1]) + z4*(c[2] + z2*c[3]));
