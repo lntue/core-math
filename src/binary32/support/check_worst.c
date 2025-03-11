@@ -385,19 +385,21 @@ static void
 check_signaling_nan (void)
 {
   float snan = asfloat (0x7f800001);
+  float qnan = asfloat (0x7fc00000);
+
   feclearexcept (FE_INVALID);
-  float y = cr_function_under_test (snan, 1.0f);
-  // check that foo(NaN,x) = NaN
+  float y = cr_function_under_test (snan, qnan);
+  // check that foo(sNaN,qNaN) = qNaN
   if (!is_nan (y))
   {
-    fprintf (stderr, "Error, foo(sNaN,x) should be NaN, got %a=%x\n",
+    fprintf (stderr, "Error, foo(sNaN,qNaN) should be NaN, got %a=%x\n",
              y, asuint (y));
     exit (1);
   }
   // check that the signaling bit disappeared
   if (issignaling (y))
   {
-    fprintf (stderr, "Error, foo(sNaN,x) should be qNaN, got sNaN=%x\n",
+    fprintf (stderr, "Error, foo(sNaN,qNaN) should be qNaN, got sNaN=%x\n",
              asuint (y));
     exit (1);
   }
@@ -405,7 +407,55 @@ check_signaling_nan (void)
   int flag = fetestexcept (FE_INVALID);
   if (!flag)
   {
+    printf ("Missing invalid exception for x,y=%a,%a\n", snan, qnan);
+    exit (1);
+  }
+
+  feclearexcept (FE_INVALID);
+  y = cr_function_under_test (snan, 1.0f);
+  // check that foo(NaN,1.0) = NaN
+  if (!is_nan (y))
+  {
+    fprintf (stderr, "Error, foo(sNaN,1.0) should be NaN, got %a=%x\n",
+             y, asuint (y));
+    exit (1);
+  }
+  // check that the signaling bit disappeared
+  if (issignaling (y))
+  {
+    fprintf (stderr, "Error, foo(sNaN,1.0) should be qNaN, got sNaN=%x\n",
+             asuint (y));
+    exit (1);
+  }
+  // check the invalid exception was set
+  flag = fetestexcept (FE_INVALID);
+  if (!flag)
+  {
     printf ("Missing invalid exception for x,y=%a,%a\n", snan, 1.0f);
+    exit (1);
+  }
+
+  feclearexcept (FE_INVALID);
+  y = cr_function_under_test (qnan, snan);
+  // check that foo(qNaN,sNaN) = qNaN
+  if (!is_nan (y))
+  {
+    fprintf (stderr, "Error, foo(qNaN,sNaN) should be NaN, got %a=%x\n",
+             y, asuint (y));
+    exit (1);
+  }
+  // check that the signaling bit disappeared
+  if (issignaling (y))
+  {
+    fprintf (stderr, "Error, foo(qNaN,sNaN) should be qNaN, got sNaN=%x\n",
+             asuint (y));
+    exit (1);
+  }
+  // check the invalid exception was set
+  flag = fetestexcept (FE_INVALID);
+  if (!flag)
+  {
+    printf ("Missing invalid exception for x=qNaN,y=%a\n", snan);
     exit (1);
   }
 
