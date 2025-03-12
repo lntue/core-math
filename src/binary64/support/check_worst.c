@@ -176,14 +176,40 @@ print_binary64 (double x)
   }
 }
 
+int underflow_before; // non-zero if processor raises underflow before rounding
+
+// return non-zero if the processor raises underflow before rounding
+// (e.g., aarch64)
+static void
+check_underflow_before (void)
+{
+  fexcept_t flag;
+  fegetexceptflag (&flag, FE_ALL_EXCEPT); // save flags
+  fesetround (FE_TONEAREST);
+  feclearexcept (FE_UNDERFLOW);
+  float x = 0x1p-126f;
+  float y = __builtin_fmaf (-x, x, x);
+  if (x == y) // this is needed otherwise the compiler says y is unused
+    underflow_before = fetestexcept (FE_UNDERFLOW);
+  fesetexceptflag (&flag, FE_ALL_EXCEPT); //restore flags
+}
+
 /* For |z| = 2^-1022 and underflow after rounding, clear the MPFR
    underflow exception when the rounded result (with unbounded exponent)
-   equals +/-2^-1022 (might be set due to a bug in MPFR <= 4.2.1). */
+   equals +/-2^-1022 (might be set due to a bug in MPFR <= 4.2.1).
+   For |z| = 2^-1022 and underflow before rounding, clear the fenv.h
+   underflow exception when |f(x,y)| < 2^-1022 but there is no underflow
+   after rounding (thus we mimic underflow after rounding). */
 static void
 fix_underflow (double x, double y, double z)
 {
   if (__builtin_fabs (z) != 0x1p-1022)
     return;
+  if (underflow_before) {
+    if (mpfr_flags_test (MPFR_FLAGS_UNDERFLOW) == 0)
+      feclearexcept (FE_UNDERFLOW);
+    return;
+  }
   mpfr_t t, u;
   mpfr_init2 (t, 53);
   mpfr_init2 (u, 53);
@@ -667,6 +693,8 @@ main (int argc, char *argv[])
           exit (1);
         }
     }
+
+  check_underflow_before ();
 
   doloop();
 
