@@ -107,8 +107,8 @@ static double __attribute__((noinline)) as_rsqrt_refine(double rf, double a){
     unsigned mode = get_rounding_mode ();
     int e = (ia.u>>52)&1;
     u64 rm, am;
-    rm = (ir.u<<11|1ll<<63)>>11;
-    am = ((ia.u&(~0ull>>12))|1ll<<52)<<(5-e);
+    rm = (ir.u<<11|1ull<<63)>>11;
+    am = ((ia.u&(~0ull>>12))|1ull<<52)<<(5-e);
     u128 rt = (u128)rm*am;
     u64 rth = rt>>64, rtl = rt;
     u128 rrt = (u128)rtl*rm;
@@ -128,7 +128,7 @@ static double __attribute__((noinline)) as_rsqrt_refine(double rf, double a){
     ir.u += (rrt>>127)?0:dd;
     rrt = (rrt>>127)?rrt:prrt;
     if(__builtin_expect(mode==FE_TONEAREST, 1)){
-      rm = (ir.u<<11|1ll<<63)>>11;
+      rm = (ir.u<<11|1ull<<63)>>11;
       rt = (u128)rm*am;
       rrt += am>>2;
       rrt += rt;

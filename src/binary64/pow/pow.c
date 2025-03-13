@@ -657,9 +657,9 @@ static inline int log_1 (double *h, double *l, double x) {
   /* now 0x1.6a09e667f3bcdp-1 <= t < 0x1.6a09e667f3bcdp+0,
      and log(x) = E * log(2) + log(t) */
 
-  double r = (_INVERSE - 181)[i];
-  double l1 = (_LOG_INV - 181)[i][0];
-  double l2 = (_LOG_INV - 181)[i][1];
+  double r = _INVERSE[i-181];
+  double l1 = _LOG_INV[i-181][0];
+  double l2 = _LOG_INV[i-181][1];
 
   double z = __builtin_fma (r, t, -1.0);
 
@@ -1316,7 +1316,7 @@ exact_pow (double *r, double x, double y, const dint64_t *z,
        the rounding test from the 2nd phase did succeed.
     */
     int cnt = __builtin_clzll (k);
-    dint64_t d = { .hi = k << cnt, .lo = 0, .ex = G + 63 - cnt, .sgn = 1 - z->sgn };
+    dint64_t d = { .hi = (uint64_t)k << cnt, .lo = 0, .ex = G + 63 - cnt, .sgn = 1 - z->sgn };
     add_dint (&d, z, &d); /* exact by Sterbenz theorem */
     /* multiply d by 2^116 */
     d.ex += 116;

@@ -334,7 +334,7 @@ static double __attribute__((noinline)) as_expm1_accurate(double x){
     fh = muldd(dxh,dxl, fh,fl, &fl);
     fh = muldd(fh,fl, th,tl, &fl);
     fh = fastsum(th,tl, fh,fl, &fl);
-    b64u64_u off = {.u = (2048+1023-ie)<<52};
+    b64u64_u off = {.u = (u64)(2048+1023-ie)<<52};
     double e;
     if(__builtin_expect(ie<53, 1))
       fh = fasttwosum(off.f, fh, &e);
@@ -409,7 +409,7 @@ double cr_expm1(double x){
     double p = (ch[0] + dx*ch[1]) + dx2*(ch[2] + dx*ch[3]);
     double fh = th, tx = th*dx, fl = tl + tx*p;
     double eps = 1.64e-19*th;
-    b64u64_u off = {.u = (2048+1023-ie)<<52};
+    b64u64_u off = {.u = (u64)(2048+1023-ie)<<52};
     double e;
     if(__builtin_expect(ie<53, 1)){
       fh = fasttwosum(off.f, fh, &e);
