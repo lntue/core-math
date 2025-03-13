@@ -124,7 +124,7 @@ static inline double opolyddd(double x, int n, const double c[][2], double *l){
 
 static inline double as_ldexp(double x, i64 i){
 #ifdef __x86_64__
-  __m128i sb; sb[0] = i<<52;
+  __m128i sb; sb[0] = (u64)i<<52;
 #if defined(__clang__)
   __m128d r = _mm_set_sd(x);
 #else
@@ -310,7 +310,7 @@ static double __attribute__((noinline)) as_expm1_accurate(double x){
     if((ix.u&(~(u64)0>>12))==0) {
       if(!(ix.u<<1)) return as_expm1_database(x,v0);
       b64u64_u v = {.f = v2};
-      i64 d = ((((i64)ix.u>>63)^((i64)v.u>>63))<<1) + 1;
+      i64 d = ((u64)(((i64)ix.u>>63)^((i64)v.u>>63))<<1) + 1;
       ix.u += d;
       v1 = ix.f;
     }

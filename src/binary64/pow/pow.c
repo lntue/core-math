@@ -1083,7 +1083,7 @@ exp_1 (double *eh, double *el, double rh, double rl, double s) {
   /* we should have 1 < M < 2047 here, since we filtered out
      potential underflow/overflow cases at the beginning of this function */
 
-  _d.u = M << 52;
+  _d.u = (uint64_t) M << 52;
   _d.f *= s;
   *eh *= _d.f;
   *el *= _d.f;
