@@ -602,7 +602,7 @@ static __attribute__((noinline)) double as_tgamma_accurate(double x){
   b64u64_u res = {.f = fh + fl};
   int64_t re = (res.u >> 52)&0x7ff;
   if(re + eoff <= 0){ // subnormal case
-    res.u -= (int64_t)(eoff+re-1)<<52;
+    res.u -= (uint64_t)(eoff+re-1)<<52;
     res.u &= 0xfffull<<52;
     double l;
     fh = fasttwosum(res.f, fh, &l);
@@ -611,7 +611,7 @@ static __attribute__((noinline)) double as_tgamma_accurate(double x){
     res.u &= ~(0x7ffull<<52);
     raise_underflow ();
   } else {
-    res.u += (int64_t)eoff<<52;
+    res.u += (uint64_t)eoff<<52;
   }
   if(ub!=lb) return as_tgamma_database(x, res.f);
   return res.f;
