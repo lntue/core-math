@@ -24,6 +24,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#include <stdio.h>
+#include <assert.h>
 #include <stdint.h>
 #include <errno.h>
 #include <fenv.h>
@@ -299,16 +301,24 @@ is_exact (float x, float y)
   e += t;
   // |x| = m*2^e with m odd
 
-  /* if y < 0 and y is not an integer, the only case where x^y might be
-     exact is when y = -n/2^k and x = 2^e with 2^k dividing e */
+  /* if y < 0, the only cases where x^y might be exact are:
+   * if y = -n*2^f with f >= 0
+   * if y = -n*2^f with f < 0, if x = 2^e with 2^(-f) dividing e
+   */
   if (y < 0)
   {
+    int32_t ez;
     if (m != 1) return 0;
-    // y = -2^f thus k = -f
-    // now e <> 0
-    t = __builtin_ctz (e);
-    if (-f > t) return 0; // 2^k does not divide e
-    int32_t ez = (-e >> (-f)) * n;
+    // now x = 2^e
+    if (f >= 0)
+      ez = ((e >= 0) ? -(e << f) : (-e << f)) * n;
+    else {
+      // y = -n*2^f thus k = -f
+      // now e <> 0
+      t = __builtin_ctz (e);
+      if (-f > t) return 0; // 2^k does not divide e
+      ez = (-e >> (-f)) * n;
+    }
     return -149 <= ez && ez < 128;
   }
 
@@ -570,7 +580,8 @@ static float as_powf_accurate2(float x0, float y0, int is_exact, FLAG_T flag){
   b64u64_u r = {.u = ((uint64_t)0x3ff+(int64_t)ee)<<52};
   b32u32_u ty = {.f = y0};
   int et = ((ty.u>>23)&0xff) - 0x7f;
-  unsigned kk = ty.u<<(8+et), isint = !(kk<<1|et>>31) || et>=23;
+  uint32_t kk = (8+et>=0) ? ty.u<<(8+et) : ty.u>>(-8-et);
+  uint32_t isint = !(kk<<1|et>>31) || et>=23;
   b64u64_u ll = {.f = el}, lh = {.f = eh};
   if(((ll.u>>(6*4-1))&((1<<29)-1)) == ((1<<29)-1)){
     if(eh<1){
