@@ -125,7 +125,7 @@ static double __attribute__((noinline)) as_hypot_denorm(u64 a, u64 b){
   b <<= 1;
   u64 rm = __builtin_sqrt(af*af + bf*bf);
   i64 tm = rm << 1;
-  i64 D = a*a + b*b - tm*tm;
+  i64 D = a*a + b*b - (u64)tm*(u64)tm;
   // D = a^2+b^2 - tm^2
   while (D > 2 * tm) { // tm too small
     D -= 2 * tm + 1;   // (tm+1)^2 = tm^2 + 2*tm + 1
