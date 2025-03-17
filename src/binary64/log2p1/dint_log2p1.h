@@ -1,6 +1,6 @@
 /* Correctly-rounded power function for two binary64 values.
 
-Copyright (c) 2022 CERN.
+Copyright (c) 2022-2025 CERN.
 Author: Tom Hubrecht
 
 This file is part of the CORE-MATH project
@@ -279,7 +279,7 @@ static inline void fast_extract(int64_t *e, uint64_t *m, double x) {
 static inline void dint_fromd(dint64_t *a, double b) {
   fast_extract(&a->ex, &a->hi, b);
 
-  uint32_t t = __builtin_clzll(a->hi);
+  uint32_t t = (a->hi) ? __builtin_clzll(a->hi) : 0;
 
   a->sgn = b < 0.0;
   a->hi = a->hi << t;
