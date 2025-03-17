@@ -190,7 +190,7 @@ long double cr_rsqrtl (long double x){
     Hh += Hl>>64;
     i64 h1 = Hh>>4;
     u64 h0 = Hh<<60|(u64)Hl>>4;
-    i128 H = (i128)h1<<64|h0, dH = Ra>>3;
+    i128 H = (u128)h1<<64|h0, dH = Ra>>3;
     u64 ddH = a>>3;
     // scan adding or subtracting 1 from r until the result is floor(1/sqrt(x))
     if(H<0){
