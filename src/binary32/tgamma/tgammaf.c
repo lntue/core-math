@@ -132,7 +132,7 @@ float cr_tgammaf(float x){
 #endif
     return 0x1p127f * 0x1p127f;
   }
-  /* compute k only after the overflow check, otherwise the case to integer
+  /* compute k only after the overflow check, otherwise the cast to integer
      might overflow */
   int32_t k;
   if(__builtin_expect(x <= -0x1p+31, 0)) {

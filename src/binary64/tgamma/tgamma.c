@@ -698,7 +698,7 @@ double cr_tgamma(double x){
   }
 
   double fx = __builtin_floor(x);
-  /* compute k only after the overflow check, otherwise the case to integer
+  /* compute k only after the overflow check, otherwise the cast to integer
      might overflow */
   int64_t k = fx;
   if(__builtin_expect(fx==x, 0)){ /* x is integer */
