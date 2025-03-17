@@ -652,7 +652,7 @@ cr_erf (double x)
     double os = __builtin_copysign (1.0, x);
 #define MASK (uint64_t) 0x7ff0000000000000 // encoding of +Inf
     if (ux > MASK)
-      return x; /* NaN */
+      return x + x; /* NaN */
     if (ux == MASK)
       return os; /* +/-Inf */
     return os - 0x1p-54 * os;
@@ -667,13 +667,13 @@ cr_erf (double x)
     /* tiny x: erf(x) ~ 2/sqrt(pi) * x + O(x^3), where the ratio of the O(x^3)
        term to the main term is in x^2/3, thus less than 2^-123 */
     double y = CH * x; /* tentative result */
-    /* scale x by 2^53 to get out the subnormal range */
-    x *= 0x1p53;
+    /* scale x by 2^106 to get out the subnormal range */
+    x *= 0x1p106;
     a_mul (&h, &l, CH, x);
     l = __builtin_fma (CL, x, l);
     /* now compute the residual h + l - y */
-    l += h - y * 0x1p53; /* h-y*2^53 is exact since h and y are very close */
-    return __builtin_fma (l, 0x1p-53, y);
+    l += h - y * 0x1p106; /* h-y*2^106 is exact since h and y are very close */
+    return __builtin_fma (l, 0x1p-106, y);
   }
   /* now z >= 2^-61 */
   err = cr_erf_fast (&h, &l, z);
