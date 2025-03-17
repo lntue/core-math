@@ -200,10 +200,10 @@ static double asinpi_acc(double x){
   const unsigned rm = get_rounding_mode ();
   b64u64_u t = {.f = x};
   int se = ((t.u>>52)&0x7ff)-0x3ff;
-  i64 xsign = t.u&(1ll<<63);
+  i64 xsign = t.u&((u64)1<<63);
   double ax = __builtin_fabs(x);
   u128_u fi;
-  u64 sm = (t.u<<11)|1ll<<63;
+  u64 sm = (t.u<<11)|(u64)1<<63;
   u128_u sm2 = {.a = (u128)sm * sm};
   if(__builtin_expect(ax<0.0131875,0)) {
     int ss = 2*se;
@@ -222,7 +222,7 @@ static double asinpi_acc(double x){
     c0 += x2*c2;
     b64u64_u ic = {.f = c0*c.f + 64.0};
     int indx = ((ic.u&(~0ull>>12)) + (1ll<<(52-7)))>>(52-6);
-    u64 cm = (c.u<<11)|1ll<<63; int ce = (c.u>>52) - 0x3ff;
+    u64 cm = (c.u<<11)|(u64)1<<63; int ce = (c.u>>52) - 0x3ff;
     u128_u cm2 = {.a = (u128)cm * cm};
     const int off = 36 - 22 + 14;
     int ss = 128 - 104 + 2*se + off;
@@ -266,7 +266,7 @@ static double asinpi_acc(double x){
       fi.a -= Cm.a>>7;
     } else {
       i128 v = muU(sm>>-se, s[indx-1].a) - (mUU(Cm.a,s[63-indx].a)>>-ce), msk = v>>127, v2 = sqrU(v) - (msk&(v+v)); // since se<0 and ce<0, the shifts by -se and -ce are legitimate
-      v2 <<= 14;
+      v2 = (u128)v2 << 14;
       u128 p = pasin(v2);
       v += mUU(p,v)-(msk&p);
       fi.a += v;
@@ -461,9 +461,9 @@ double cr_asinpi(double x){
   b64u64_u t = {.f = x};
   int e = ((t.u>>52)&0x7ff)-0x3ff;
   /* x = 2^e*y with 1 <= |y| < 2 */
-  i64 xsign = t.u&(1ll<<63);
+  i64 xsign = t.u&((u64)1<<63);
   /* xsign=0 for x > 0, xsign=1 for x < 0 */
-  u64 sm = (t.u<<11)|1ll<<63;
+  u64 sm = (t.u<<11)|(u64)1<<63;
   /* sm contains in its high 53 bits: the implicit leading bit, and the
      the 52 explicit bits from the significand, thus |x| = 2^(e+1)*sm/2^64
      where 2^63 <= sm < 2^64 */
@@ -600,7 +600,7 @@ double cr_asinpi(double x){
        thus:
        y = y[i] + asin(x*cos(y[i]) - sqrt(1-x^2)*sin(y[i]))
        where x*cos(y[i]) - sqrt(1-x^2)*sin(y[i]) is small. */
-    u64 cm = (c.u<<11)|1ll<<63; int ce = (c.u>>52) - 0x3ff;
+    u64 cm = (c.u<<11)|(u64)1<<63; int ce = (c.u>>52) - 0x3ff;
     /* cm contains in its high bits the 53 significant bits from c,
        which approximates sqrt(1-x^2), including the implicit bit,
        ce is the corresponding exponent, such that c = 2^ce*cm/2^63.
@@ -702,7 +702,7 @@ double cr_asinpi(double x){
     /* fi.a/2^127 approximates pi/2/64 */
     fi.a *= (u64)(64u - indx); /* multiply pi/2/64 by i=64-indx */
     /* we add v after normalization */
-    u64 Vh = v>>5, Vl = v<<59;
+    u64 Vh = v>>5, Vl = (u64)v<<59;
     /* the maximal error 24.08 on v translates into an error of 24.08*2^59
        on Vl */
     i128 V = (u128)Vh<<64|Vl;
