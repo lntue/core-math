@@ -304,9 +304,8 @@ check (double x)
   // check errno
 #ifdef CORE_MATH_SUPPORT_ERRNO
   // If x is a normal number and y is NaN, we should have errno = EDOM.
-  if (!is_nan (x) && !is_inf (x))
-  {
-    if (is_nan (z1) && errno != EDOM)
+  int expected_edom = !is_nan (x) && is_nan (z1);
+  if (expected_edom && errno != EDOM)
     {
       printf ("Missing errno=EDOM for x=%la (y=%la)\n", x, z1);
       fflush (stdout);
@@ -316,7 +315,7 @@ check (double x)
       exit(1);
 #endif
     }
-    if (!is_nan (z1) && errno == EDOM)
+    if (!expected_edom && errno == EDOM)
     {
       printf ("Spurious errno=EDOM for x=%la (y=%la)\n", x, z1);
       fflush (stdout);
@@ -329,9 +328,10 @@ check (double x)
 
     /* If x is a normal number and a pole error (y exact infinity) or an
        overflow/underflow occurs, we should have errno = ERANGE. */
-    int expected_erange = (is_inf (z1) && inex1 == 0) ||
-      mpfr_flags_test (MPFR_FLAGS_OVERFLOW) ||
-      mpfr_flags_test (MPFR_FLAGS_UNDERFLOW);
+    int expected_erange = !is_nan (x) && !is_inf (x) &&
+      ((is_inf (z1) && inex1 == 0) ||
+       mpfr_flags_test (MPFR_FLAGS_OVERFLOW) ||
+       mpfr_flags_test (MPFR_FLAGS_UNDERFLOW));
     if (expected_erange && errno != ERANGE)
     {
       printf ("Missing errno=ERANGE for x=%la (y=%la)\n", x, z1);
@@ -352,7 +352,6 @@ check (double x)
       exit(1);
 #endif
     }
-  }
 #endif
 
   return 0;
