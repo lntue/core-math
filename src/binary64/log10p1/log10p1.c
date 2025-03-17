@@ -1,6 +1,6 @@
 /* Correctly rounded log10(1+x) for binary64 values.
 
-Copyright (c) 2022-2023 INRIA and CERN.
+Copyright (c) 2022-2025 INRIA and CERN.
 Authors: Paul Zimmermann and Tom Hubrecht.
 
 This file is part of the CORE-MATH project
@@ -1451,8 +1451,8 @@ cr_log10p1 (double x)
     };
     static const double U[] = { 0, -1, 1, 2, -1, 3, -1, 4, 5, -1, 6, -1, 7, 8,
                                -1, 9, -1, 10, 11, -1, 12, -1, 13, 14, -1, 15 };
-    int i = (t.u >> 53) - 511;
-    if (T[i] == x)
+    int i = (t.u >> 53) - 0x1ff;
+    if (0 <= i && i < 26 && T[i] == x)
       return U[i];
   }
 
