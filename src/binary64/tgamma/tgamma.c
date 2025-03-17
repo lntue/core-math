@@ -603,12 +603,12 @@ static __attribute__((noinline)) double as_tgamma_accurate(double x){
   int64_t re = (res.u >> 52)&0x7ff;
   if(re + eoff <= 0){ // subnormal case
     res.u -= (int64_t)(eoff+re-1)<<52;
-    res.u &= 0xffful<<52;
+    res.u &= 0xfffull<<52;
     double l;
     fh = fasttwosum(res.f, fh, &l);
     fl += l;
     res.f = fh + fl;
-    res.u &= ~(0x7fful<<52);
+    res.u &= ~(0x7ffull<<52);
     raise_underflow ();
   } else {
     res.u += (int64_t)eoff<<52;
@@ -620,8 +620,8 @@ static __attribute__((noinline)) double as_tgamma_accurate(double x){
 double cr_tgamma(double x){
   b64u64_u t = {.f = x};
   uint64_t ax = t.u<<1;
-  if(__builtin_expect(ax>=(0x7fful<<53), 0)){ /* x=NaN or +/-Inf */
-    if(ax==(0x7fful<<53)){ /* x=+/-Inf */
+  if(__builtin_expect(ax>=(0x7ffull<<53), 0)){ /* x=NaN or +/-Inf */
+    if(ax==(0x7ffull<<53)){ /* x=+/-Inf */
       if(t.u>>63){ /* x=-Inf */
 #ifdef CORE_MATH_SUPPORT_ERRNO
 	errno = EDOM;
@@ -755,14 +755,14 @@ double cr_tgamma(double x){
       int re = (th.u>>52)&0x7ff;
       if(re-e<=0){ // subnormal case
 	th.u += (int64_t)(e-re+1)<<52; // 1 <= e-re+1 <= 53
-	th.u &= 0xffful<<52;
+	th.u &= 0xfffull<<52;
 	double l;
 	rh = fasttwosum(th.f, rh, &l);
 	rl += l;
 	double ub = rh + (rl + eps), lb = rh + (rl - eps);
 	if(ub != lb) return as_tgamma_accurate(x);
 	th.f = ub;
-	th.u &= ~(0x7fful<<52); // make subnormal
+	th.u &= ~(0x7ffull<<52); // make subnormal
         raise_underflow ();
       } else {
 	double ub = rh + (rl + eps), lb = rh + (rl - eps);
