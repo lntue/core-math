@@ -1026,18 +1026,18 @@ long double fastpath_roundtest(double rh, double rl, int extra_exp,
 		else ml >>= sh-64;
 	} else {
 		mlt = ml>>sh;
-		ml <<= 64-sh;
+		ml = (uint64_t)ml << (64-sh);
 	}
 
 	// construct the mantissa of the long double number
-	uint64_t mh = ((th.u<<11)|1l<<63);
+	uint64_t mh = ((th.u<<11)|1ull<<63);
 
 	mh += mlt;
 	if(__builtin_expect(!(mh>>63),0)){ // the low part is negative and
 	                                   // can unset the msb so shift the
 	                                   // number back
 		mh = mh<<1 | (uint64_t)ml>>63;
-		ml <<= 1;
+		ml = (uint64_t)ml<<1;
 		extra_exp--;
 	}
 	int64_t eps = (mh >> (83 - 64));
@@ -1067,7 +1067,8 @@ long double fastpath_roundtest(double rh, double rl, int extra_exp,
 	uint64_t oldmh = mh; // For overflow detection
 	if(rm==FE_TONEAREST){ // round to nearest
 		mh += (uint64_t)ml>>63; // add the round bit
-		ml <<= 1; eps <<= 1;
+		ml = (uint64_t)ml<<1;
+                eps <<= 1;
 		/* Multiplying ml by 2 we discard the round bit,
 		   thus the rounding test will fail even if we are
 		   near an exact value. The reason is that when x^y
@@ -1099,7 +1100,7 @@ long double fastpath_roundtest(double rh, double rl, int extra_exp,
 	v.m = mh; // mantissa
 	v.e = wanted_exponent; // exponent
 	if(__builtin_expect(invert, 0)) {v.e += (1<<15);}
-	bool b1 = (uint64_t)(ml + eps) <= (uint64_t)(2*eps);
+	bool b1 = (uint64_t)ml + eps <= (uint64_t)(2*eps);
 	*fail = b1;
 
 	// Denormals *inside* the computation don't seem to be a problem
@@ -1342,7 +1343,7 @@ void q_exp2xs(qint64_t* r, uint64_t fracpart, qint64_t* corr) {
 	} else {
 		// Convert corr_h and corr_l to a qint
 		int shift = __builtin_clzl(corr_h);
-		corr_h <<= shift;
+		corr_h = (uint64_t)corr_h<<shift;
 		corr_h |= shift ? (corr_l >> (128 - shift)) : 0;
 		corr_l <<= shift;
 		corr->hh = corr_h;
