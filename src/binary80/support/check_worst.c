@@ -1,6 +1,6 @@
 /* Check correctness of bivariate long double function on worst cases.
 
-Copyright (c) 2022-2024 Stéphane Glondu, Paul Zimmermann, Inria.
+Copyright (c) 2022-2025 Stéphane Glondu, Paul Zimmermann, Inria.
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -188,7 +188,7 @@ check (long double x, long double y)
   ref_fesetround(rnd);
   mpfr_flags_clear (MPFR_FLAGS_INEXACT | MPFR_FLAGS_UNDERFLOW | MPFR_FLAGS_OVERFLOW);
   long double z1 = ref_function_under_test(x, y);
-#ifdef CORE_MATH_CHECK_INEXACT
+#if defined(CORE_MATH_CHECK_INEXACT) || defined(CORE_MATH_SUPPORT_ERRNO)
   mpfr_flags_t inex1 = mpfr_flags_test (MPFR_FLAGS_INEXACT);
 #endif
   fesetround(rnd1[rnd]);
@@ -197,7 +197,9 @@ check (long double x, long double y)
   errno = 0;
 #endif
   long double z2 = cr_function_under_test(x, y);
+#ifdef CORE_MATH_CHECK_INEXACT
   int inex2 = fetestexcept (FE_INEXACT);
+#endif
   /* Note: the test z1 != z2 would not distinguish +0 and -0. */
   if (is_equal (z1, z2) == 0) {
 #ifndef EXCHANGE_X_Y
