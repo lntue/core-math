@@ -1086,7 +1086,10 @@ static void
 p_1a (double *h, double *l, double z)
 {
   double z2h, z2l;
-  a_mul (&z2h, &z2l, z, z);
+  if (__builtin_expect (__builtin_fabs (z) >= 0x1p-255, 1))
+    a_mul (&z2h, &z2l, z, z);
+  else // avoid spurious underflow
+    z2h = z2l = 0;
   double z4h = z2h * z2h;
   double p910 = __builtin_fma (Pa[10], z, Pa[9]);
   double p78 = __builtin_fma (Pa[8], z, Pa[7]);
@@ -1193,12 +1196,12 @@ cr_log2p1_accurate_tiny (double x)
   if (x == -0x0.2c316a14459d8p-1022)
     return __builtin_fma (-0x1p-600, 0x1p-600, -0x1.fe0e7458ac1f8p-1025);
   /* first scale x to avoid truncation of l in the underflow region */
-  x = x * 0x1p53;
+  x = x * 0x1p106;
   s_mul (&h, &l, x, INVLOG2H, INVLOG2L);
-  double res = (h + l) * 0x1p-53; // expected result
-  l = __builtin_fma (-res, 0x1p53, h) + l;
-  // the correction to apply to res is l*2^-53
-  return __builtin_fma (l, 0x1p-53, res);
+  double res = (h + l) * 0x1p-106; // expected result
+  l = __builtin_fma (-res, 0x1p106, h) + l;
+  // the correction to apply to res is l*2^-106
+  return __builtin_fma (l, 0x1p-106, res);
 }
 
 /* the following is a degree-17 polynomial approximating log2p1(x) for
@@ -1908,8 +1911,12 @@ cr_log2p1_fast (double *h, double *l, double x, int e, d64u64 v)
 
   /* (xh,xl) <- 1+x */
   double xh, xl;
-  if (x > 1.0)
-    fast_two_sum (&xh, &xl, x, 1.0);
+  if (x > 1.0) {
+    if (__builtin_expect (x < 0x1.fffffffffffffp+1023, 1))
+        fast_two_sum (&xh, &xl, x, 1.0);
+    else // avoid spurious overflow for RNDU
+      xh = x, xl = 1.0;
+  }
   else
     fast_two_sum (&xh, &xl, 1.0, x);
 
@@ -1919,7 +1926,11 @@ cr_log2p1_fast (double *h, double *l, double x, int e, d64u64 v)
   cr_log_fast (h, l, e, v);
 
   /* log(xh+xl) = log(xh) + log(1+xl/xh) */
-  double c = xl / xh;
+  double c;
+  if (__builtin_expect (xh <= 0x1p1022 || __builtin_fabs (xl) >= 4.0, 1))
+    c = xl / xh;
+  else
+    c = 0; // avoid spurious underflow
   /* Since |xl| < ulp(xh), we have |xl| < 2^-52 |xh|,
      thus |c| < 2^-52, and since |log(1+x)-x| < x^2 for |x| < 0.5,
      we have |log(1+c)-c)| < c^2 < 2^-104. */
@@ -1975,7 +1986,7 @@ cr_log2p1 (double x)
       else
         return 1.0 / -0.0;
     }
-    return x; /* +/-0, NaN or +Inf */
+    return x + x; /* +/-0, NaN or +Inf */
   }
   /* now x > -1 */
   /* normalize v in [1,2) */

@@ -573,7 +573,10 @@ static void
 p_1a (double *h, double *l, double z)
 {
   double z2h, z2l;
-  a_mul (&z2h, &z2l, z, z);
+  if (__builtin_expect (__builtin_fabs (z) >= 0x1p-255, 1))
+    a_mul (&z2h, &z2l, z, z);
+  else // avoid spurious underflow
+    z2h = z2l = 0;
   double z4h = z2h * z2h;
   double p910 = __builtin_fma (Pa[10], z, Pa[9]);
   double p78 = __builtin_fma (Pa[8], z, Pa[7]);
