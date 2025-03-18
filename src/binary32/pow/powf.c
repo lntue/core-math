@@ -651,7 +651,8 @@ static float as_powf_accurate2(float x0, float y0, int is_exact, FLAG_T flag){
   if (is_exact)
     set_flag (flag);
 #ifdef CORE_MATH_SUPPORT_ERRNO
-  if (__builtin_fabsf (res) < 0x1p-126f && !is_exact)
+  if ((__builtin_fabsf (res) < 0x1p-126f && !is_exact) ||
+      __builtin_fabs (eh) >= 0x1p128)
     errno = ERANGE;
 #endif
   return res;
