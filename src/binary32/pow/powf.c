@@ -517,7 +517,7 @@ float cr_powf(float x0, float y0){
   if(((rr.u+off)&0xfffffff) <= 2*off)
     return as_powf_accurate2 (x0, y0, is_exact (x0, y0), flag);
   int et = ((ty.u>>52)&0x7ff) - 0x3ff;
-  uint64_t kk = ty.u<<(11+et);
+  uint64_t kk = (et >= -11) ? ty.u<<(11+et) : ty.u>>(-11-et);
   if(!(kk<<1)&&kk) rr.f = __builtin_copysign(rr.f,x);
   float res = rr.f;
 #ifdef CORE_MATH_SUPPORT_ERRNO
