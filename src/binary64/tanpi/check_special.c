@@ -1,6 +1,6 @@
 /* Various special tests
 
-Copyright (c) 2023 Alexei Sibidanov
+Copyright (c) 2023-2025 Alexei Sibidanov
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -87,7 +87,7 @@ double rand_arg2(){
   do {
     r0 = rand () | (int64_t) rand () << 31;
     r1 = rand () | (int64_t) rand () << 31;
-    o.u = r0^(r1<<32);
+    o.u = r0^((uint64_t)r1<<32);
   } while((o.u<<1)>=(0x7ffull<<53));
   return o.f;
 }
