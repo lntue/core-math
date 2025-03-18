@@ -1,6 +1,6 @@
 /* Correctly-rounded atanpi of binary64 value.
 
-Copyright (c) 2023 Alexei Sibidanov and Paul Zimmermann
+Copyright (c) 2023-2025 Alexei Sibidanov and Paul Zimmermann
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -378,10 +378,10 @@ atanpi_subnormal (double x)
   h = x * ONE_OVER_PIH;
   /* Assuming h = x*ONE_OVER_PIH - e, the correction term is
      e + x * ONE_OVER_PIL, but we need to scale values to avoid underflow. */
-  double corr = __builtin_fma (x * 0x1p55, ONE_OVER_PIH, -h * 0x1p55);
-  corr = __builtin_fma (x * 0x1p55, ONE_OVER_PIL, corr);
-  // now return h + corr * 2^-55
-  return __builtin_fma (corr, 0x1p-55, h);
+  double corr = __builtin_fma (x * 0x1p106, ONE_OVER_PIH, -h * 0x1p106);
+  corr = __builtin_fma (x * 0x1p106, ONE_OVER_PIL, corr);
+  // now return h + corr * 2^-106
+  return __builtin_fma (corr, 0x1p-106, h);
 }
 
 double cr_atanpi (double x){
