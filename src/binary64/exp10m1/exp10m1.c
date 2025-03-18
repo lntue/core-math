@@ -1,6 +1,6 @@
 /* Correctly-rounded exp10m1 function for binary64 value.
 
-Copyright (c) 2022-2023 Paul Zimmermann, Tom Hubrecht and Claude-Pierre Jeannerod
+Copyright (c) 2022-2025 Paul Zimmermann, Tom Hubrecht and Claude-Pierre Jeannerod
 
 This file is part of the CORE-MATH project
 (https://core-math.gitlabpages.inria.fr/).
@@ -953,7 +953,7 @@ cr_exp10m1 (double x)
   {
     // x = -NaN or x <= -0x1.041704c068efp+4
     if ((ux >> 52) == 0xfff) // -NaN or -Inf
-      return (ux > 0xfff0000000000000llu) ? x : -1.0;
+      return (ux > 0xfff0000000000000llu) ? x + x: -1.0;
     // for x <= -0x1.041704c068efp+4, exp10m1(x) rounds to -1 to nearest
     return -1.0 + 0x1p-54;
   }
@@ -961,7 +961,7 @@ cr_exp10m1 (double x)
   {
     // x = +NaN or x > 0x1.34413509f79fep+8
     if ((ux >> 52) == 0x7ff) // +NaN
-      return x;
+      return x + x;
     // for x > 0x1.34413509f79fep+8, exp10m1(x) rounds to +Inf to nearest
     return 0x1.fffffffffffffp+1023 * x;
   }
@@ -983,19 +983,19 @@ cr_exp10m1 (double x)
       if (__builtin_fabs (x) == 0x0.13a7b70d0248cp-1022)
         return __builtin_fma (__builtin_copysign (0x0.fffp-537, x), 0x1p-538,
                               __builtin_copysign (0x1.6a0f9dcb97e38p-1025, x));
-      // scale x by 2^57
-      x = x * 0x1p57;
+      // scale x by 2^106
+      x = x * 0x1p106;
       a_mul (&h, &l, LN10H, x);
       l = __builtin_fma (LN10L, x, l);
       double h2 = h + l; // round to 53-bit precision
       // scale back, hoping to avoid double rounding
-      h2 = h2 * 0x1p-57;
-      // now subtract back h2 * 2^57 from h to get the correction term
-      h = __builtin_fma (-h2, 0x1p57, h);
+      h2 = h2 * 0x1p-106;
+      // now subtract back h2 * 2^106 from h to get the correction term
+      h = __builtin_fma (-h2, 0x1p106, h);
       // add l
       h += l;
-      // add h2 + h * 2^-57
-      return __builtin_fma (h, 0x1p-57, h2);
+      // add h2 + h * 2^-106
+      return __builtin_fma (h, 0x1p-106, h2);
     }
     else // 2^-104 < |x| <= 2^-54
     {
