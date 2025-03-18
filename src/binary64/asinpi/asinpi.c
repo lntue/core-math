@@ -345,11 +345,11 @@ static double asinpi_tiny (double x)
 
   /* we compute h before scaling, so that h is exactly representable */
   h = x * ONE_OVER_PIH;
-  x = x * 0x1p53; /* scale x */
-  l = __builtin_fma (x, ONE_OVER_PIH, -h * 0x1p53);
+  x = x * 0x1p106; /* scale x */
+  l = __builtin_fma (x, ONE_OVER_PIH, -h * 0x1p106);
   l = __builtin_fma (x, ONE_OVER_PIL, l);
   /* scale back */
-  return __builtin_fma (l, 0x1p-53, h);
+  return __builtin_fma (l, 0x1p-106, h);
 }
 
 /* special routine for 2^-53 <= |x| < 2^-26 */
@@ -474,7 +474,7 @@ double cr_asinpi(double x){
       /* h=0x1.921fb54442d18p+0 is pi/2 rounded to nearest,
          and 0x1.1a62633145c07p-54 is pi/2-h rounded to nearest */
       return x * 0.5; // asinpi_specific
-    if (e==0x400 && m) return x; // nan
+    if (e==0x400 && m) return x + x; // nan
 #ifdef CORE_MATH_SUPPORT_ERRNO
     errno = EDOM;
 #endif
