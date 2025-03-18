@@ -297,7 +297,9 @@ static inline void print_dint(const dint64_t *a) {
 static inline void inv_dint (dint64_t *r, double a)
 {
   dint64_t q, A;
-  dint_fromd (r, 1.0 / a); /* accurate to about 53 bits */
+  // we convert 4/a and divide by 4 to avoid a spurious underflow
+  dint_fromd (r, 4.0 / a);
+  r->ex -= 2;
   /* we use Newton's iteration: r -> r + r*(1-a*r) */
   dint_fromd (&A, -a);
   mul_dint (&q, &A, r);    /* -a*r */
