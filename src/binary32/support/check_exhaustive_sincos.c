@@ -172,7 +172,7 @@ doit (uint32_t n)
   ref_fesetround (rnd);
   mpfr_flags_clear (MPFR_FLAGS_INEXACT | MPFR_FLAGS_UNDERFLOW | MPFR_FLAGS_OVERFLOW);
   ref_function_under_test (x, &y1, &y2);
-#ifdef CORE_MATH_CHECK_INEXACT
+#if defined(CORE_MATH_CHECK_INEXACT) || defined(CORE_MATH_SUPPORT_ERRNO)
   mpfr_flags_t inex_y = mpfr_flags_test (MPFR_FLAGS_INEXACT);
 #endif
   fesetround (rnd1[rnd]);
