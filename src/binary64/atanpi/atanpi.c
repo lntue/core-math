@@ -469,10 +469,3 @@ double cr_atanpi (double x){
   if(__builtin_expect(ub == lb, 1)) return ub;
   return as_atan_refine2(x, ub0);
 }
-
-#ifndef SKIP_C_FUNC_REDEF // icx provides this function
-/* just to compile since glibc does not have atanpi */
-double atanpi (double x){
-  return atan (x) / M_PI;
-}
-#endif

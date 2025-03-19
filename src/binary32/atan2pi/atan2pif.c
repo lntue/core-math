@@ -186,10 +186,3 @@ float cr_atan2pif(float y, float x){
 #endif
   return rf;
 }
-
-#ifndef SKIP_C_FUNC_REDEF // icx provides this function
-/* just to compile since glibc does not contain this function */
-float atan2pif(float x, float y){
-  return cr_atan2pif(x, y);
-}
-#endif

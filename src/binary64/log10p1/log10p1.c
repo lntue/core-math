@@ -1590,11 +1590,3 @@ static inline double dint_tod(dint64_t *a) {
 
   return r.f * e.f;
 }
-
-#ifndef SKIP_C_FUNC_REDEF
-// since GNU does not provide log10p1, we use a fake function as reference
-double log10p1 (double x)
-{
-  return log10 (1.0 + x);
-}
-#endif

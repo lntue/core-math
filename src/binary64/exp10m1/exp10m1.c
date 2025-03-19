@@ -1119,12 +1119,3 @@ cr_exp10m1 (double x)
 
   return exp10m1_accurate (x);
 }
-
-#ifndef SKIP_C_FUNC_REDEF
-// fake function as long as GNU libc does not provide it
-double exp10m1 (double x)
-{
-  // we don't use exp10 since it is not in C99 (would need _GNU_SOURCE)
-  return pow (10.0, x) - 1.0;
-}
-#endif

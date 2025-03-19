@@ -398,10 +398,3 @@ void sincosn2(int s, double *sh, double *sl, double *ch, double *cl){
   *sh = __builtin_copysign(1.0, sgn[ss])*tsh;
   *sl = __builtin_copysign(1.0, sgn[ss])*tsl;
 }
-
-#ifndef SKIP_C_FUNC_REDEF // icx provides this function
-/* just to compile since glibc does not provide this function */
-double sinpi(double x){
-  return sin(M_PI*x);
-}
-#endif

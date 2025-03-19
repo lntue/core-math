@@ -110,10 +110,3 @@ float cr_cospif(float x){
   double r = ts + (ts*z2)*fc - (tc*z)*fs;
   return r;
 }
-
-#ifndef SKIP_C_FUNC_REDEF // icx provides this function
-/* just to compile since glibc does not contain this function */
-float cospif(float x){
-  return cr_cospif(x);
-}
-#endif

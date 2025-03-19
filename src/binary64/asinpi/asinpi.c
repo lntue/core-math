@@ -746,10 +746,3 @@ double cr_asinpi(double x){
   t.u = ((fi.bh>>(11-nz))+((u64)(e-nz)<<52|rnd))|xsign;
   return t.f;
 }
-
-#ifndef SKIP_C_FUNC_REDEF
-/* just to compile since glibc does not have asinpi */
-double asinpi (double x){
-  return asin (x) / M_PI;
-}
-#endif

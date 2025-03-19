@@ -162,10 +162,3 @@ float cr_log10p1f(float x){
   }
   return ub;
 }
-
-#ifndef SKIP_C_FUNC_REDEF
-/* just to compile since glibc does not contain this function */
-float log10p1f(float x){
-  return cr_log10p1f(x);
-}
-#endif

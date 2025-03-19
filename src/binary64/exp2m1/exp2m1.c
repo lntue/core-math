@@ -1001,11 +1001,3 @@ cr_exp2m1 (double x)
 
   return exp2m1_accurate (x);
 }
-
-#ifndef SKIP_C_FUNC_REDEF
-// fake function as long as GNU libc does not provide it
-double exp2m1 (double x)
-{
-  return exp2 (x) - 1.0;
-}
-#endif
