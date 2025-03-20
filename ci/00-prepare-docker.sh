@@ -7,9 +7,9 @@ find /etc/apt/sources.list.d/ -type f | xargs -r grep -li intel | xargs -r rm
 apt-get update -qq && apt-get install -qq build-essential git libmpfr-dev
 # the default MPFR library does not contain new C23 functions
 # we thus install MPFR 4.2.1
-wget https://www.mpfr.org/mpfr-current/mpfr-4.2.1.tar.gz
-tar xf mpfr-4.2.1.tar.gz
-cd mpfr-4.2.1
+wget https://www.mpfr.org/mpfr-current/mpfr-4.2.2.tar.gz
+tar xf mpfr-4.2.2.tar.gz
+cd mpfr-4.2.2
 ./configure
 make -j
 make install
