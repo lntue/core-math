@@ -159,7 +159,7 @@ double cr_cospi(double x){
       return x + x; // NaN
     }
     s = -s - 1; // now 2^(41+s) <= |x| < 2^(42+s)
-    if(s>11) return 1.0;
+    if(s>11) return 1.0; // |x| >= 2^53
     uint64_t iq = ((uint64_t)m<<s) + 1024;
     if(!(iq&2047)) return 0.0;
     double sh, sl, ch, cl; sincosn(iq, &sh, &sl, &ch, &cl);
@@ -249,7 +249,7 @@ void sincosn(int s, double *sh, double *sl, double *ch, double *cl){
   j = (~it&j) - ((uint32_t)it<<10) - (it&j);
   int is = j>>5, ic = 0x20 - is, jm = j&0x1f;
   int ss = (s>>11)&1;
-  int sc = ((s+1024)>>11)&1;
+  int sc = (((uint32_t)s+1024)>>11)&1;
   
   double sbh = Sn[is][0], sbl = Sn[is][1];
   double cbh = Sn[ic][0], cbl = Sn[ic][1];
