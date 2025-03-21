@@ -344,7 +344,7 @@ double cr_exp2(double x){
   if (__builtin_expect(ax <= 0x792e2a8eca5705fcull, 0))
     return 1.0 + __builtin_copysign (0x1p-54, x);
 
-  u64 m = ix.u<<12, ex = (ax>>53) - 0x3ff, frac = ex>>63 | m<<ex;
+  u64 m = ix.u<<12, ex = (ax>>53) - 0x3ff, frac = ex>>63 | m<<(ex&63);
   double sx = 4096.0*x, fx = roundeven_finite(sx), z = sx - fx, z2 = z*z;
   int64_t k = fx, i1 = k&0x3f, i0 = (k>>6)&0x3f, ie = k>>12;
   double t0h = t0[i0][1], t0l = t0[i0][0];
