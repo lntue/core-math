@@ -10,6 +10,6 @@ apt-get update -qq && apt-get install -qq build-essential git libmpfr-dev autoco
 git clone https://gitlab.inria.fr/mpfr/mpfr.git
 cd mpfr
 autoreconf -i
-./configure
+./autogen.sh
 make -j
 make install
