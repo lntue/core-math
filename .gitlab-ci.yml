@@ -78,5 +78,5 @@ check_dry_icx:
     - ci/00-prepare-docker.sh
   script:
     - apt-get update -qq && apt-get install -qq build-essential git libmpfr-dev
-    # MPFR 4.2.1 is installed in /usr/local
+    # MPFR-dev is installed in /usr/local
     - FORCE=true DRY=--dry CC=icx LDFLAGS="-L /usr/local/lib" EXTRA_CFLAGS="-I /usr/local/include" ./ci.sh
