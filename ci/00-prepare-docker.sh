@@ -11,5 +11,6 @@ git clone https://gitlab.inria.fr/mpfr/mpfr.git
 cd mpfr
 autoreconf -i
 ./autogen.sh
+./configure
 make -j
 make install
