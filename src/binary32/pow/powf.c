@@ -234,9 +234,9 @@ is_exact (float x, float y)
   if (__builtin_expect ((v.u << 1) == 0x7f000000, 0)) // |x| = 1
     return 1;
 
-  // xmax[y] for 1<=y<=15 is the largest m such that m^y fits in 53 bits
-  static const uint32_t xmax[] = { 0, 0xffffff, 4095, 255, 63, 27, 15, 10,
-                                   7, 6, 5, 4, 3, 3, 3, 3};
+  // xmax[y] for 1<=y<=15 is the largest odd m such that m^y fits in 24 bits
+  static const uint32_t xmax[] = { 0, 0xffffff, 4095, 255, 63, 27, 15, 9,
+                                   7, 5, 5, 3, 3, 3, 3, 3};
   if (y >= 0 && isint (y)) {
     /* let x = m*2^e with m an odd integer, x^y is exact when
        - y = 0 or y = 1
