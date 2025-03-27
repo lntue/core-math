@@ -56,7 +56,7 @@ static __attribute__((noinline)) float as_special(float x){
 #ifdef CORE_MATH_SUPPORT_ERRNO
     errno = ERANGE;
 #endif
-    return -0.0f/1.0f; // -inf
+    return -1.0f/0.0f; // -inf
   }
   if(ax > 0xff000000u) return x + x; // nan
 #ifdef CORE_MATH_SUPPORT_ERRNO
