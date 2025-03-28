@@ -326,22 +326,34 @@ static double asinpi_tiny (double x)
       : __builtin_fma (0x1p-600, 0x1p-600, -0x1.bc03df34e902cp-1022);
 
   /* exceptional case +/-0x1.5cba89af1f855p-1022 */
-  if (au == 0x15cba89af1f855llu)
+  if (au == 0x15cba89af1f855llu) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    errno = ERANGE; // underflow
+#endif
     return (x > 0)
       ? __builtin_fma (-0x1p-600, 0x1p-600, 0x1.bc03df34e902cp-1024)
       : __builtin_fma (0x1p-600, 0x1p-600, -0x1.bc03df34e902cp-1024);
+  }
 
   /* exceptional case +/-0x1.68e6482549db1p-1022 */
-  if (au == 0x168e6482549db1llu)
+  if (au == 0x168e6482549db1llu) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    errno = ERANGE; // underflow
+#endif
     return (x > 0)
       ? __builtin_fma (0x1p-600, 0x1p-600, 0x1.cb82f5da3a6b4p-1024)
       : __builtin_fma (-0x1p-600, 0x1p-600, -0x1.cb82f5da3a6b4p-1024);
+  }
 
   /* exceptional case 0x1.5cba89af1f855p-1021 */
-  if (au == 0x25cba89af1f855llu)
+  if (au == 0x25cba89af1f855llu) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    errno = ERANGE; // underflow
+#endif
     return (x > 0)
       ? __builtin_fma (-0x1p-600, 0x1p-600, 0x1.bc03df34e902cp-1023)
       : __builtin_fma (0x1p-600, 0x1p-600, -0x1.bc03df34e902cp-1023);
+  }
 
   /* we compute h before scaling, so that h is exactly representable */
   h = x * ONE_OVER_PIH;
@@ -349,7 +361,15 @@ static double asinpi_tiny (double x)
   l = __builtin_fma (x, ONE_OVER_PIH, -h * 0x1p106);
   l = __builtin_fma (x, ONE_OVER_PIL, l);
   /* scale back */
-  return __builtin_fma (l, 0x1p-106, h);
+  /* for RNDN/RNDU, asinpi(x) underflows for |x| <= 0x1.921fb54442d17p-1021,
+     for RNDZ for |x| <= 0x1.921fb54442d18p-1021,
+     in all cases |o(f(x))| < 2^-1022 */
+  double res = __builtin_fma (l, 0x1p-106, h);
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  if (__builtin_fabs (res) < 0x1p-1022)
+    errno = ERANGE; // underflow
+#endif
+  return res;
 }
 
 /* special routine for 2^-53 <= |x| < 2^-26 */
@@ -553,6 +573,9 @@ double cr_asinpi(double x){
        We check the last bit (or the round bit for FE_TONEAREST) does not
        change between fi and u. */
     if( __builtin_expect(((fi.bh^u.bh)>>(11-nz))&1, 0)){
+#ifdef CORE_MATH_CHECK_INEXACT
+      feraiseexcept(FE_INEXACT);
+#endif
       return asinpi_acc (x);
     }
     e += 0x3ff;
@@ -744,5 +767,8 @@ double cr_asinpi(double x){
     rnd = 0;
   }
   t.u = ((fi.bh>>(11-nz))+((u64)(e-nz)<<52|rnd))|xsign;
+#ifdef CORE_MATH_CHECK_INEXACT
+  feraiseexcept(FE_INEXACT);
+#endif
   return t.f;
 }

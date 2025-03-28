@@ -171,8 +171,10 @@ fix_underflow (long double x, long double y, long double z)
   /* don't call mpfr_subnormalize here since we precisely want an unbounded
      exponent */
   mpfr_abs (t, t, MPFR_RNDN); // exact
+#if MPFR_VERSION_MAJOR<4 || (MPFR_VERSION_MAJOR==4 && MPFR_VERSION_MINOR<=2)
   if (mpfr_cmp_ui_2exp (t, 1, -16382) == 0) // |o(f(x,y))| = 2^-16382
     mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
+#endif
   mpfr_clear (t);
   mpfr_clear (u);
 }

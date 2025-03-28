@@ -151,6 +151,7 @@ fix_underflow (float x, float y1, float y2)
      exponent */
   mpfr_abs (t, t, MPFR_RNDN); // exact
   mpfr_abs (u, u, MPFR_RNDN); // exact
+#if MPFR_VERSION_MAJOR<4 || (MPFR_VERSION_MAJOR==4 && MPFR_VERSION_MINOR<=2)
   /* Check if we have the issue for one of y1 or y2,
      while the other one does not underflow. */
   if (mpfr_cmp_ui_2exp (t, 1, -126) == 0 && // |o(f1(x))| = 2^-126
@@ -159,6 +160,7 @@ fix_underflow (float x, float y1, float y2)
   if (mpfr_cmp_ui_2exp (u, 1, -126) == 0 && // |o(f2(x))| = 2^-126
       mpfr_cmp_ui_2exp (t, 1, -126) >= 0)
     mpfr_flags_clear (MPFR_FLAGS_UNDERFLOW);
+#endif
   mpfr_clear (t);
   mpfr_clear (u);
 }
