@@ -265,7 +265,7 @@ double cr_hypot(double x, double y){
     /* ninf is 1 when only one of x and y is +/-Inf
        nqnn is 1 when only one of x and y is qNaN
        IEEE 754 says that hypot(+/-Inf,qNaN)=hypot(qNaN,+/-Inf)=+Inf. */
-    if(ninf && nqnn) return 1.0/0.0;
+    if (ninf && nqnn) return (wx==wm) ? x * x : y * y;
     return x + y; /* inf, nan */
   }
   double u = __builtin_fmax(x,y), v = __builtin_fmin(x,y);

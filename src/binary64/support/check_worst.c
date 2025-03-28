@@ -60,7 +60,8 @@ typedef struct {
 
 typedef union { double f; uint64_t i; } d64u64;
 
-/* scanf %la from buf, allowing snan, +snan and -snan */
+/* scanf %la from buf, allowing snan, +snan and -snan,
+   qnan, +qnan and -qnan */
 static int
 sscanf_snan (char *buf, double *x)
 {
@@ -75,6 +76,18 @@ sscanf_snan (char *buf, double *x)
   else if (strncmp (buf, "-snan", 5) == 0)
   {
     d64u64 u = {.i = 0xfff4000000000000};
+    *x = u.f;
+    return 1;
+  }
+  else if (strncmp (buf, "qnan", 4) == 0 || strncmp (buf, "+qnan", 5) == 0)
+  {
+    d64u64 u = {.i = 0x7ff8000000000000};
+    *x = u.f;
+    return 1;
+  }
+  else if (strncmp (buf, "-qnan", 5) == 0)
+  {
+    d64u64 u = {.i = 0xfff8000000000000};
     *x = u.f;
     return 1;
   }
