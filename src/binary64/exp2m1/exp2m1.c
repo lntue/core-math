@@ -25,6 +25,7 @@ SOFTWARE.
 */
 
 #include <stdint.h>
+#include <errno.h>
 #include <math.h> // needed to define exp2m1() since glibc does not have it yet
 
 // Warning: clang also defines __GNUC__
@@ -858,7 +859,11 @@ cr_exp2m1 (double x)
     if ((ux >> 52) == 0x7ff) // +NaN
       return x + x;
     /* for x >= 1024, exp2m1(x) rounds to +Inf to nearest,
-       but for RNDZ, we should have no overflow for x=1024 */
+       but for RNDZ/RNDD, we should have no overflow for x=1024 */
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    if (x > 1024.0 || (1.0 - 0x1p-54 == 1.0))
+      errno = ERANGE; // overflow
+#endif
     return 0x1.fffffffffffffp+1023 + x * 0x1.fffffffffffffp+960;
   }
   else if (ax <= 0x3cc0527dbd87e24dllu) // |x| <= 0x1.0527dbd87e24dp-51
@@ -891,9 +896,12 @@ cr_exp2m1 (double x)
          0 < x <= 0x1.71547652b82fep-1022 for RNDZ, and for
          0 < x <= 0x1.71547652b82fdp-1022 for RNDN/RNDU. */
       double res = __builtin_fma (h, 0x1p-106, h2);
-      if (ax <= 0x171547652b82fdllu && __builtin_fabs (res) < 0x1p-1022)
+      if (ax <= 0x171547652b82fdllu || __builtin_fabs (res) < 0x1p-1022)
       {
         volatile double __attribute__((unused)) dummy = res * res;
+#ifdef CORE_MATH_SUPPORT_ERRNO
+	errno = ERANGE; // underflow
+#endif
       }
       return res;
     }
@@ -991,6 +999,15 @@ cr_exp2m1 (double x)
 
   /* now -54 < x < -0x1.0527dbd87e24dp-51
      or 0x1.0527dbd87e24dp-51 < x < 1024 */
+
+  /* 2^x-1 is exact for x integer, -53 <= x <= 53 */
+  if (__builtin_expect (ux << 17 == 0, 0)) {
+    int i = __builtin_floor (x);
+    if (x == (double) i && -53 <= i && i <= 53) {
+      return (i >= 0) ? ((uint64_t) 1 << i) - 1
+	: -1.0 + __builtin_ldexp (1.0, i);
+    }
+  }
 
   double err, h, l;
   err = exp2m1_fast (&h, &l, x, ax <= 0x3fc0000000000000llu);
