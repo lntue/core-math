@@ -1431,48 +1431,18 @@ cr_log10p1 (double x)
     return x + x; /* +/-0, NaN or +Inf */
   }
 
-  /* check x=10^n-1 for 0 <= n <= 15, where log10p1(x) is exact,
+  /* check x=10^n-1 for 1 <= n <= 15, where log10p1(x) is exact,
      and we shouldn't raise the inexact flag */
-  if (__builtin_expect (e <= 49, 1)) {
-    /* the check e <= 49 avoids a spurious overflow in x+1.0
-       for x = DBL_MAX and RNDU */
-    d64u64 t = {.f = x + 1.0};
-    if (__builtin_expect ((t.u << 46) == 0, 0))
-    {
-      static const double T[] = {
-        0x0p+0,
-        -1,
-        0x1.2p+3,
-        0x1.8cp+6,
-        -1,
-        0x1.f38p+9,
-        -1,
-        0x1.3878p+13,
-        0x1.869fp+16,
-        -1,
-        0x1.e847ep+19,
-        -1,
-        0x1.312cfep+23,
-        0x1.7d783fcp+26,
-        -1,
-        0x1.dcd64ff8p+29,
-        -1,
-        0x1.2a05f1ff8p+33,
-        0x1.74876e7ffp+36,
-        -1,
-        0x1.d1a94a1ffep+39,
-        -1,
-        0x1.2309ce53ffep+43,
-        0x1.6bcc41e8fffcp+46,
-        -1,
-        0x1.c6bf52633fff8p+49,
-      };
-      static const double U[] = { 0, -1, 1, 2, -1, 3, -1, 4, 5, -1, 6, -1, 7, 8,
-                                  -1, 9, -1, 10, 11, -1, 12, -1, 13, 14, -1, 15 };
-      int i = (t.u >> 53) - 0x1ff;
-      if (0 <= i && i < 26 && T[i] == x)
-        return U[i];
-    }
+  if (__builtin_expect (3 <= e && e <= 49, 1)) {
+    /* T[e] is zero if there is no value of the form 10^n-1 in the range
+       [2^e, 2^(e+1)), otherwise it is this (unique) value. */
+    static const double T[] = {
+      0x0p+0, 0x0p+0, 0x0p+0, 0x1.2p+3, 0x0p+0, 0x0p+0, 0x1.8cp+6, 0x0p+0, 0x0p+0, 0x1.f38p+9, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.3878p+13, 0x0p+0, 0x0p+0, 0x1.869fp+16, 0x0p+0, 0x0p+0, 0x1.e847ep+19, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.312cfep+23, 0x0p+0, 0x0p+0, 0x1.7d783fcp+26, 0x0p+0, 0x0p+0, 0x1.dcd64ff8p+29, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.2a05f1ff8p+33, 0x0p+0, 0x0p+0, 0x1.74876e7ffp+36, 0x0p+0, 0x0p+0, 0x1.d1a94a1ffep+39, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.2309ce53ffep+43, 0x0p+0, 0x0p+0, 0x1.6bcc41e8fffcp+46, 0x0p+0, 0x0p+0, 0x1.c6bf52633fff8p+49};
+    // U[e] is the integer n such that T[e] = 10^n-1 when T[e] is not zero
+    static const int U[] = {
+      0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 0, 4, 0, 0, 5, 0, 0, 6, 0, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 0, 10, 0, 0, 11, 0, 0, 12, 0, 0, 0, 13, 0, 0, 14, 0, 0, 15};
+    if (x == T[e])
+      return U[e];
   }
 
   /* now x > -1 */
