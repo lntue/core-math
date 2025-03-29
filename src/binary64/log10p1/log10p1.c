@@ -1261,21 +1261,6 @@ cr_log10p1_accurate (double x)
   else
     fast_two_sum (&xh, &xl, 1.0, x);
 
-  /* log10p1(x) is exact when 1+x = 10^e, thus when 10^e-1 is exactly
-     representable. This can only occur when xl=0 here, and 1 <= e <= 15. */
-  if (xl == 0 && __builtin_round (x) == x)
-  {
-    int e = 0;
-    uint64_t u = __builtin_round (x);
-    while ((u % 10) == 0)
-      {
-        u /= 10;
-        e += 1;
-      }
-    if (u == 1)
-      return (double) e;
-  }
-
   dint_fromd (&X, xh);
   log_2 (&Y, &X);
 
