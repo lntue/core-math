@@ -1007,9 +1007,9 @@ cr_exp10m1 (double x)
       // add l
       h += l;
       // add h2 + h * 2^-106
-      /* we get underflow for |x| <= 0x1.bcb7b1526e50dp-1024 */
+      /* we get underflow for |x| <= 0x1.bcb7b1526e50cp-1024 */
 #ifdef CORE_MATH_SUPPORT_ERRNO
-      if (__builtin_fabs (x) <= 0x1.bcb7b1526e50dp-1024)
+      if (__builtin_fabs (x) <= 0x1.bcb7b1526e50cp-1024)
 	errno = ERANGE; // underflow
 #endif
       return __builtin_fma (h, 0x1p-106, h2);

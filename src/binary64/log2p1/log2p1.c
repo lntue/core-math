@@ -1,6 +1,6 @@
 /* Correctly rounded log2(1+x) for binary64 values.
 
-Copyright (c) 2022-2023 INRIA and CERN.
+Copyright (c) 2022-2025 INRIA and CERN.
 Authors: Paul Zimmermann and Tom Hubrecht.
 
 This file is part of the CORE-MATH project
@@ -34,6 +34,7 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <math.h> // for log2
+#include <errno.h>
 #include "dint_log2p1.h"
 
 /*
@@ -1191,16 +1192,27 @@ cr_log2p1_accurate_tiny (double x)
 {
   double h, l;
 
-  if (x == 0x0.2c316a14459d8p-1022)
-    return __builtin_fma (0x1p-600, 0x1p-600, 0x1.fe0e7458ac1f8p-1025);
-  if (x == -0x0.2c316a14459d8p-1022)
-    return __builtin_fma (-0x1p-600, 0x1p-600, -0x1.fe0e7458ac1f8p-1025);
+  // exceptional values
+  if (__builtin_fabs (x) == 0x0.2c316a14459d8p-1022) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+    errno = ERANGE; // underflow
+#endif
+    return (x > 0) ?__builtin_fma (0x1p-600, 0x1p-600, 0x1.fe0e7458ac1f8p-1025)
+      : __builtin_fma (-0x1p-600, 0x1p-600, -0x1.fe0e7458ac1f8p-1025);
+  }
+
   /* first scale x to avoid truncation of l in the underflow region */
-  x = x * 0x1p106;
-  s_mul (&h, &l, x, INVLOG2H, INVLOG2L);
+  double sx = x * 0x1p106;
+  s_mul (&h, &l, sx, INVLOG2H, INVLOG2L);
   double res = (h + l) * 0x1p-106; // expected result
   l = __builtin_fma (-res, 0x1p106, h) + l;
   // the correction to apply to res is l*2^-106
+  /* For all rounding modes, we have underflow
+     for |x| <= 0x1.62e42fefa39eep-1023 */
+#ifdef CORE_MATH_SUPPORT_ERRNO
+  if (__builtin_fabs (x) <= 0x1.62e42fefa39eep-1023)
+    errno = ERANGE; // underflow
+#endif
   return __builtin_fma (l, 0x1p-106, res);
 }
 
@@ -1981,14 +1993,45 @@ cr_log2p1 (double x)
     if (x <= -1.0) /* we use the fact that NaN < -1 is false */
     {
       /* log2p(x<-1) is NaN, log2p(-1) is -Inf and raises DivByZero */
-      if (x < -1.0)
+      if (x < -1.0) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+	errno = EDOM;
+#endif
         return 0.0 / 0.0;
-      else
+      }
+      else { // x=-1
+#ifdef CORE_MATH_SUPPORT_ERRNO
+	errno = ERANGE;
+#endif
         return 1.0 / -0.0;
+      }
     }
     return x + x; /* +/-0, NaN or +Inf */
   }
+
   /* now x > -1 */
+
+  /* check x=2^n-1 for 0 <= n <= 53, where log2p1(x) is exact,
+     and we shouldn't raise the inexact flag */
+  if (0 <= e && e <= 52) {
+    /* T[e]=2^(e+1)-1, i.e., the unique value of the form 2^n-1
+       in the interval [2^e, 2^(e+1)). */
+    static const double T[] = {
+      0x1p+0, 0x1.8p+1, 0x1.cp+2, 0x1.ep+3, 0x1.fp+4, 0x1.f8p+5, 0x1.fcp+6, 0x1.fep+7, 0x1.ffp+8, 0x1.ff8p+9, 0x1.ffcp+10, 0x1.ffep+11, 0x1.fffp+12, 0x1.fff8p+13, 0x1.fffcp+14, 0x1.fffep+15, 0x1.ffffp+16, 0x1.ffff8p+17, 0x1.ffffcp+18, 0x1.ffffep+19, 0x1.fffffp+20, 0x1.fffff8p+21, 0x1.fffffcp+22, 0x1.fffffep+23, 0x1.ffffffp+24, 0x1.ffffff8p+25, 0x1.ffffffcp+26, 0x1.ffffffep+27, 0x1.fffffffp+28, 0x1.fffffff8p+29, 0x1.fffffffcp+30, 0x1.fffffffep+31, 0x1.ffffffffp+32, 0x1.ffffffff8p+33, 0x1.ffffffffcp+34, 0x1.ffffffffep+35, 0x1.fffffffffp+36, 0x1.fffffffff8p+37, 0x1.fffffffffcp+38, 0x1.fffffffffep+39, 0x1.ffffffffffp+40, 0x1.ffffffffff8p+41, 0x1.ffffffffffcp+42, 0x1.ffffffffffep+43, 0x1.fffffffffffp+44, 0x1.fffffffffff8p+45, 0x1.fffffffffffcp+46, 0x1.fffffffffffep+47, 0x1.ffffffffffffp+48, 0x1.ffffffffffff8p+49, 0x1.ffffffffffffcp+50, 0x1.ffffffffffffep+51, 0x1.fffffffffffffp+52};
+    if (x == T[e])
+      return e + 1;
+
+  }
+
+  /* For x=2^k-1, -53 <= k <= -1, log2p1(x) = k is also exact. */
+  if (__builtin_expect (e == -1 && x < 0, 0)) { // -1 < x <= -1/2
+    d64u64 w = {.f = 1.0 + x}; // 1+x is exact
+    if ((w.u << 12) == 0) { // 1+x = 2^k
+      int k = (w.u >> 52) - 0x3ff;
+      return k;
+    }
+  }
+
   /* normalize v in [1,2) */
   v.u = (0x3ffull << 52) | (v.u & 0xfffffffffffff);
   /* now x = m*2^e with 1 <= m < 2 (m = v.f) and -1074 <= e <= 1023 */

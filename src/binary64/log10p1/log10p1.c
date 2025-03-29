@@ -1421,7 +1421,7 @@ cr_log10p1 (double x)
 #endif
         return 0.0 / 0.0;
       }
-      else {
+      else { // x=-1
 #ifdef CORE_MATH_SUPPORT_ERRNO
 	errno = ERANGE;
 #endif
