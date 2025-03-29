@@ -27,6 +27,7 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <math.h> // for log2
+#include <errno.h>
 #include "dint.h"
 
 typedef union { double f; uint64_t u; } d64u64;
@@ -679,11 +680,20 @@ cr_log10p1_accurate_tiny (double x)
 {
   double h, l;
   /* first scale x to avoid truncation of l in the underflow region */
-  x = x * 0x1p106;
-  s_mul (&h, &l, x, INVLOG10H, INVLOG10L);
+  double sx = x * 0x1p106;
+  s_mul (&h, &l, sx, INVLOG10H, INVLOG10L);
   double res = (h + l) * 0x1p-106; // expected result
   l = __builtin_fma (-res, 0x1p106, h) + l;
   // the correction to apply to res is l*2^-106
+  /* For RNDN, we have underflow for |x| <= 0x1.26bb1bbb55515p-1021,
+     and for rounding away, for |x| < 0x1.26bb1bbb55515p-1021. */
+#ifdef CORE_MATH_SUPPORT_ERRNO
+#define X0 0x1.26bb1bbb55515p-1021
+  double dummy = __builtin_copysign (1.0, x);
+  if (__builtin_fabs (x) < X0 ||
+      (__builtin_fabs (x) == X0 && __builtin_fma (dummy, 0x1p-53, dummy) == dummy))
+    errno = ERANGE; // underflow
+#endif
   return __builtin_fma (l, 0x1p-106, res);
 }
 
@@ -1420,10 +1430,18 @@ cr_log10p1 (double x)
     if (x <= -1.0) /* we use the fact that NaN < -1 is false */
     {
       /* log10p(x<-1) is NaN, log2p(-1) is -Inf and raises DivByZero */
-      if (x < -1.0)
+      if (x < -1.0) {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+	errno = EDOM;
+#endif
         return 0.0 / 0.0;
-      else
+      }
+      else {
+#ifdef CORE_MATH_SUPPORT_ERRNO
+	errno = ERANGE;
+#endif
         return 1.0 / -0.0;
+      }
     }
     return x + x; /* +/-0, NaN or +Inf */
   }
@@ -1589,4 +1607,9 @@ static inline double dint_tod(dint64_t *a) {
   e.u = ((a->ex + 1023) & 0x7ff) << 52;
 
   return r.f * e.f;
+}
+
+double log10p1 (double x)
+{
+  return log10 (1.0 + x);
 }
