@@ -357,16 +357,16 @@ static double asinpi_tiny (double x)
 
   /* we compute h before scaling, so that h is exactly representable */
   h = x * ONE_OVER_PIH;
-  x = x * 0x1p106; /* scale x */
-  l = __builtin_fma (x, ONE_OVER_PIH, -h * 0x1p106);
-  l = __builtin_fma (x, ONE_OVER_PIL, l);
+  double sx  = x * 0x1p106; /* scale x */
+  l = __builtin_fma (sx, ONE_OVER_PIH, -h * 0x1p106);
+  l = __builtin_fma (sx, ONE_OVER_PIL, l);
   /* scale back */
-  /* for RNDN/RNDU, asinpi(x) underflows for |x| <= 0x1.921fb54442d17p-1021,
-     for RNDZ for |x| <= 0x1.921fb54442d18p-1021,
-     in all cases |o(f(x))| < 2^-1022 */
+  /* for RNDN/RNDU, asinpi(x) underflows for 0 < x <= 0x1.921fb54442d17p-1021,
+     for RNDZ for |x| <= 0x1.921fb54442d18p-1021, in which case |res| < 2^-1022 */
   double res = __builtin_fma (l, 0x1p-106, h);
 #ifdef CORE_MATH_SUPPORT_ERRNO
-  if (__builtin_fabs (res) < 0x1p-1022)
+  if (__builtin_fabs (x) <= 0x1.921fb54442d17p-1021
+      || __builtin_fabs (res) < 0x1p-1022)
     errno = ERANGE; // underflow
 #endif
   return res;
