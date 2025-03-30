@@ -390,7 +390,7 @@ static inline double as_ldexp(double x, int64_t i){
     return r[0];
 #else
     d64u64 ix = {.f = x};
-    ix.u += i<<52;
+    ix.u += (uint64_t)i<<52;
     return ix.f;
 #endif
 }

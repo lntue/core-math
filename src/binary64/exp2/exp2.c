@@ -126,7 +126,7 @@ static inline double as_ldexp(double x, i64 i){
   return r[0];
 #else
   b64u64_u ix = {.f = x};
-  ix.u += i<<52;
+  ix.u += (u64)i<<52;
   return ix.f;
 #endif
 }
