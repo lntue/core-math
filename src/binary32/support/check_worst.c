@@ -112,6 +112,7 @@ readstdin(float2 **result, int *count)
         (*count)++;
     }
   }
+  free (buf);
 }
 
 typedef union {float f; uint32_t u;} b32u32_u;

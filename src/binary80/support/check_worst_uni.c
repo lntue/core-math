@@ -103,6 +103,7 @@ readstdin(long double **result, int *count)
       (*count)++;
     }
   }
+  free (buf);
 }
 
 static int

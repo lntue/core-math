@@ -118,6 +118,7 @@ readstdin(ldouble2 **result, int *count)
         (*count)++;
     }
   }
+  free (buf);
 }
 
 static int

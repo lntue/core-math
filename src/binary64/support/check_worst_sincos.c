@@ -99,6 +99,7 @@ readstdin(double **result, int *count)
     else if (sscanf(buf, "%la", item) == 1)
       (*count)++;
   }
+  free (buf);
 }
 
 static inline uint64_t

@@ -131,6 +131,7 @@ readstdin(testcase **result, int *count)
         (*count)++;
     }
   }
+  free (buf);
 }
 
 static inline uint64_t
