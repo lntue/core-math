@@ -118,11 +118,35 @@ LOG_FILE="$(mktemp /tmp/core-math.XXXXXX)"
 f=$1
 u="$(echo src/binary*/*/$f.c)"
 
+if [ -z "${HOME_PATH}" ]; then
+    HOME_PATH=$HOME
+fi
+
+shift
+
+while [ -n "$1" ]; do
+    case "$1" in
+        --skip_core_math ) SKIP_CORE_MATH=TRUE; shift ;;
+        --skip_system_libc ) SKIP_SYSTEM_LIBC=TRUE; shift ;;
+        --show_perf_error ) SHOW_PERF_ERROR=TRUE; shift ;;
+        --latency ) LATENCY_MODE=TRUE; PERF_ARGS="--latency"; shift ;;
+        --rdtsc ) CORE_MATH_PERF_MODE="rdtsc"; shift ;;
+        --perf ) CORE_MATH_PERF_MODE="perf"; shift ;;
+        --llvm ) export LIBM="${HOME_PATH}/llvm-project/build/projects/libc/lib/libllvmlibc.a"; shift ;;
+        --llvm2 ) export LIBM="${HOME_PATH}/llvm/llvm-project/build/projects/libc/lib/libllvmlibc.a"; shift ;;
+        --musl ) export CC="musl-gcc"; shift ;;
+        --simple_stat ) CORE_MATH_SIMPLE_STAT=TRUE; shift ;;
+        --quiet ) CORE_MATH_QUET=TRUE; shift ;;
+        --fast ) N=10000; shift ;;
+        * ) break ;;
+    esac
+done
+
 if [ -z "$CORE_MATH_PERF_MODE" ]; then
     if [ -z "$CORE_MATH_QUIET" ]; then
-        echo 'CORE_MATH_PERF_MODE (perf or rdtsc) environment variable is not set. The default is perf.'
+        echo 'CORE_MATH_PERF_MODE (perf or rdtsc) environment variable is not set. The default is rdtsc.'
     fi
-    CORE_MATH_PERF_MODE=perf
+    CORE_MATH_PERF_MODE=rdtsc
 fi
 
 if [ -f "$u" ]; then
@@ -146,6 +170,9 @@ fi
 export CFLAGS ROUNDING_MATH
 
 if [ -n "$LIBM" ]; then
+    if [ -z "$CORE_MATH_QUIET" ]; then
+      echo "LIBC-location: $LIBM"
+    fi
     BACKUP_LIBM="$LIBM"
     unset LIBM
 fi
@@ -173,38 +200,80 @@ make -s perf
 
 PERF_ARGS="${PERF_ARGS} --file ${RANDOMS_FILE} --count ${N} --repeat ${M}"
 
-if [ "$CORE_MATH_PERF_MODE" = perf ]; then
-    proc_perf
-
-    PERF_ARGS="${PERF_ARGS} --libc"
-    proc_perf
-
-elif [ "$CORE_MATH_PERF_MODE" = rdtsc ]; then
+if [ "$CORE_MATH_PERF_MODE" = rdtsc ]; then
     PERF_ARGS="${PERF_ARGS} --rdtsc"
-    proc_rdtsc
-
-    PERF_ARGS="${PERF_ARGS} --libc"
-    proc_rdtsc
 fi
 
-has_symbol () {
-    [ "$(nm "$LIBM" | while read a b c; do if [ "$c" = "$f" ]; then echo OK; return; fi; done | wc -l)" -ge 1 ]
-}
+if [ -z "$SKIP_CORE_MATH" ]; then
+    if [ -z "$CORE_MATH_QUIET" ]; then
+      if [ -z "$LATENCY_MODE" ]; then
+        echo "-- CORE-MATH reciprocal throughput --"
+      else
+        echo "-- CORE-MATH latency --"
+      fi
+    fi
+    if [ "$CORE_MATH_PERF_MODE" = perf ]; then
+        proc_perf
+    elif [ "$CORE_MATH_PERF_MODE" = rdtsc ]; then
+        proc_rdtsc
+    fi
+fi
+
+CFLAGS="${CFLAGS} -DSKIP_C_FUNC_REDEF=1"
+export CFLAGS
+
+if [ -z "$SKIP_SYSTEM_LIBC" ]; then
+    make -s clean
+
+    if ! (make -s perf &> /dev/null); then
+        if [ -z "$CORE_MATH_QUIET" ]; then
+            echo "$f is not present in system libc; skipping"
+        else
+            echo "N/A"
+        fi
+    else
+        if [ -z "$CORE_MATH_QUIET" ]; then
+            if [ -z "$LATENCY_MODE" ]; then
+                echo "-- System LIBC reciprocal throughput --"
+            else
+                echo "-- System LIBC latency --"
+            fi
+        fi
+        PERF_ARGS="${PERF_ARGS} --libc"
+        if [ "$CORE_MATH_PERF_MODE" = perf ]; then
+            proc_perf
+        elif [ "$CORE_MATH_PERF_MODE" = rdtsc ]; then
+            proc_rdtsc
+        fi
+    fi
+fi
 
 if [ -n "$BACKUP_LIBM" ]; then
     export LIBM="$BACKUP_LIBM"
+
+    CFLAGS="${CFLAGS} -DSKIP_C_FUNC_REDEF=1"
+    export CFLAGS
+
     if has_symbol; then
         PERF_ARGS="${PERF_ARGS} --libc"
         make -s clean
         make -s perf
+        if [ -z "$CORE_MATH_QUIET" ]; then
+            if [ -z "$LATENCY_MODE" ]; then
+                echo "-- LIBC reciprocal throughput --"
+            else
+                echo "-- LIBC latency --"
+            fi
+        fi
         if [ "$CORE_MATH_PERF_MODE" = perf ]; then
             proc_perf
 
         elif [ "$CORE_MATH_PERF_MODE" = rdtsc ]; then
-            PERF_ARGS="${PERF_ARGS} --rdtsc"
             proc_rdtsc
         fi
     elif [ -z "$CORE_MATH_QUIET" ]; then
-        echo "$f is not present in $LIBM; skipping" >&2
+        echo "$f is not present in $LIBM; skipping"
+    else
+        echo "N/A"
     fi
 fi

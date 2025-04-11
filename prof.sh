@@ -22,7 +22,10 @@ fi
 
 CFLAGS="$CFLAGS -ggdb"
 
-COMMON_PERF_ARGS=(--file "$RANDOMS_FILE" --count 1000000)
+export LIBM="$HOME/experiment/llvm-project/build/projects/libc/lib/libllvmlibc.a"
+
+# COMMON_PERF_ARGS=(--file "$RANDOMS_FILE" --count 10000 --libc --latency)
+COMMON_PERF_ARGS=(--file "$RANDOMS_FILE" --count 100000 --libc )
 
 cd $dir
 make -s clean
@@ -30,4 +33,4 @@ make -s perf
 ./perf "${COMMON_PERF_ARGS[@]}" --reference
 
 perf record --output="$PERF_DATA_FILE" ./perf "${COMMON_PERF_ARGS[@]}" --repeat 500
-perf annotate --input="$PERF_DATA_FILE"
+perf annotate --input="$PERF_DATA_FILE" --percent-type=local-hits
